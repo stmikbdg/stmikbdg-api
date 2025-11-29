@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 // ? Models - table
 use App\Models\KRS\KRSMatkul;
+use App\Models\TahunAjaran;
 use App\Models\Users\Mahasiswa;
 
 class KRS extends Model
@@ -87,5 +88,9 @@ class KRS extends Model
      */
     public function mahasiswa() {
         return $this->belongsTo(Mahasiswa::class, 'mhs_id', 'mhs_id');
+    }
+
+    public function tahun_ajaran() {
+        return $this->belongsTo(TahunAjaran::class, 'tahun_id', 'tahun_id');
     }
 }

@@ -46,6 +46,7 @@ Route::prefix('/sikps')
                     ->group(function () {
                         Route::get('/', 'getAll');
                         Route::get('/mahasiswa', 'getForMahasiswa');
+                        Route::get('/mahasiswa/{jenis}', 'getForMahasiswaByJenis');
                         Route::get('/nim/{nim}', 'getByNim');
                         Route::get('/dospem', 'getForDospem');
                         
@@ -60,10 +61,19 @@ Route::prefix('/sikps')
             ->group(function () {
                 Route::prefix('/master-jadwal')
                     ->group(function () {
-                        Route::get('/', 'getAll');
-                        Route::post('/', 'create');
-                        Route::put('/id/{id}', 'update');
-                        Route::delete('/id/{id}', 'delete');
+                        Route::middleware('auth.dospem')
+                            ->group(function () {
+                                Route::get('/', 'getAll');
+                                Route::post('/', 'create');
+                                Route::put('/id/{id}', 'update');
+                                Route::delete('/id/{id}', 'delete');
+                            });
+                        
+                        Route::middleware('auth.mahasiswa')
+                            ->prefix('/mahasiswa')
+                            ->group(function () {
+                                Route::get('/', 'getAll_mahasiswa');
+                            });
                     });
             });
 
@@ -91,7 +101,7 @@ Route::prefix('/sikps')
                                 // Route::put('/id/{id}', 'update_dospem');
                                 Route::delete('/id/{id}', 'delete_dospem');
                                 Route::get('/review/id/{id}', 'review_dospem');
-                                Route::post('/feedback/id/{id}', 'feedback_dospem');
+                                // Route::post('/feedback/id/{id}', 'feedback_dospem');
                                 Route::put('/arsip', 'arsip_dospem');
                             });
 
@@ -114,16 +124,18 @@ Route::prefix('/sikps')
                     ->middleware('auth.mahasiswa')
                     ->group(function () {
                         Route::get('/', 'getAll_mahasiswa'); 
-                        Route::post('/booking', 'booking_mahasiswa');
-                        Route::delete('/booking/{id}', 'delete_booking_mahasiswa');
+                        Route::post('/booking/jadwal_id/{jadwal_id}', 'booking_mahasiswa');
+                        Route::delete('/booking/id/{id}', 'delete_booking_mahasiswa');
                     });
 
                 Route::prefix('/dospem')
                     ->middleware('auth.dospem')
                     ->group(function () {
                         Route::get('/', 'getAll_dospem');
-                        Route::put('/id/{id}', 'update_single_dospem');
-                        Route::put('/multi-id', 'update_multi_dospem');
+                        Route::post('/feedback/id/{id}', 'feedback_dospem');
+                        Route::delete('/booking/id/{id}', 'cancel_booking_dospem');
+                        // Route::put('/id/{id}', 'update_single_dospem');
+                        // Route::put('/multi-id', 'update_multi_dospem');
                     });
 
             });

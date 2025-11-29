@@ -21,6 +21,10 @@ use App\Models\Users\StaffMarketingView;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\ImportUser;
 use App\Exceptions\ExcelImportException;
+use App\Models\Keuangan\MasterPembayaran;
+use App\Models\Keuangan\TahunAkademik;
+use App\Models\TahunAjaranView;
+use Illuminate\Support\Carbon;
 
 class UserController extends Controller {
     public function addNewUser(Request $request) {
@@ -127,6 +131,7 @@ class UserController extends Controller {
     public function getMyProfile() {
         try {
             $user = $this->getUserAuth();
+
             $account= collect(auth()->user())->filter(function ($item) {
                 return $item;
             });
@@ -139,13 +144,96 @@ class UserController extends Controller {
                 unset($account['is_staff']);
             }
 
+            $keuangan = null;
+
+            // return response()->json([
+            //     'status' => 'success',
+            //     'message' => 'Berhasil mengambil data profile',
+            //     'data' => [
+            //         'profile' => $user,
+            //         'account' => $account,
+            //         'keuangan' => $keuangan
+            //     ]
+            // ], 200);
+
+            if(isset($account['is_mhs'])) {
+                if($account['is_mhs']) {
+                    if(isset($user['mhs_id'])) {
+                        $keuangan = $this->cek_keuangan_mhs($user);
+                    }
+                }
+            }
+
             return $this->successfulResponseJSON([
                 'profile' => $user,
-                'account' => $account
+                'account' => $account,
+                'keuangan' => $keuangan
             ]);
         } catch (\Exception $e) {
             return ErrorHandler::handle($e);
         }
+    }
+
+    public function cek_keuangan_mhs($profile) {
+
+        $mhsId = $profile['mhs_id'] ?? null;
+        $allTahunAkademik = TahunAkademik::getTahunAkademik([
+            'status' => 1
+        ]);
+        $today = Carbon::now();
+
+        $terminAktif = null;
+
+        // 1. Cari termin berdasarkan tanggal
+        foreach ($allTahunAkademik as $ta) {
+            if ($today->between(Carbon::parse($ta['ganjil_mulai']), Carbon::parse($ta['ganjil_pelaksanaan_akhir']))) {
+                $terminAktif = $ta['termin'];
+                break;
+            }
+            if ($today->between(Carbon::parse($ta['genap_mulai']), Carbon::parse($ta['genap_pelaksanaan_akhir']))) {
+                $terminAktif = $ta['termin'];
+                break;
+            }
+            if ($today->between(Carbon::parse($ta['antara_mulai']), Carbon::parse($ta['antara_pelaksanaan_akhir']))) {
+                $terminAktif = $ta['termin'];
+                break;
+            }
+        }
+
+        // 2. Ambil tahun ajaran aktif (untuk ambil tahun_id)
+        $tahunAktif = TahunAjaranView::getTahunAjaran($profile);
+        if(!$tahunAktif->exists()) {
+            return [
+                'success' => false,
+                'message' => 'Belum ada tahun ajaran aktif!',
+                'termin'  => 0
+            ];
+        }
+        $semesterSekarang = $tahunAktif ?? null;
+        $tahunId = $semesterSekarang['tahun_id'] ?? null;
+
+        // 3. Kalau tidak ada termin aktif → ambil termin terakhir
+        if (!$terminAktif) {
+            $terminAktif = collect($allTahunAkademik)->max('termin');
+        }
+
+        // 4. Cek apakah sudah bayar di termin yang ketemu
+        $sudahBayar = MasterPembayaran::where('mhs_id', $mhsId)
+            ->whereHas('detailPembayaran.biayaPerMahasiswa.m_komponen_biaya', function ($query) {
+                $query->whereIn('id_nama_komponen', [4, 5, 6]);
+            })
+            // ->whereHas('detailPembayaran', function ($query) {
+            //     $query->where('status_verifikasi', 1)
+            // })
+            ->where('tahun_id', $tahunId)
+            ->where('termin', $terminAktif)
+            ->exists();
+
+        return [
+            'success'  => $sudahBayar,                   // true/false
+            'message' => $sudahBayar ? 'Sudah Bayar' : 'Belum Bayar',
+            'termin'  => $terminAktif
+        ];
     }
 
     public function putMyPassword(Request $request) {
@@ -242,25 +330,34 @@ class UserController extends Controller {
 
             $image = $request->file('image');
             $fileName = $image->hashName();
-            $image->storeAs('public/users/images/', $fileName);
+            // $image->storeAs('public/users/images/', $fileName);
 
-            // cek old image
-            $oldImage = auth()->user()->image;
+            // // cek old image
+            // $oldImage = auth()->user()->image;
 
-            if ($oldImage !== config('app.url') . 'storage/users/images/college_student.png') {
-                $pathOldImage = 'public/users/images/' . auth()->user()->image;
-                Storage::delete($pathOldImage);
+            // if ($oldImage !== config('app.url') . 'storage/users/images/college_student.png') {
+            //     $pathOldImage = 'public/users/images/' . auth()->user()->image;
+            //     Storage::delete($pathOldImage);
+            // }
+
+            // $imgUrl = config('app.url') . 'storage/users/images/' . $fileName;
+
+            $response = $this->uploadFile('profile/images', $fileName, $image);
+
+            if (!$response['success']) {
+                return response()->json([
+                    'status' => 'fail',
+                    'message' => 'Gagal mengunggah foto profil'
+                ], 500);
             }
-
-            $imgUrl = config('app.url') . 'storage/users/images/' . $fileName;
 
             User::where('id', auth()->user()->id)
                 ->update([
-                    'image' => $imgUrl,
+                    'image' => $response['data']['url'],
                 ]);
 
             return $this->successfulResponseJSON([
-                'image' => $imgUrl
+                'image' => $response['data']['url']
             ], 'Foto profil berhasil diperbarui');
         } catch (\Exception $e) {
             return ErrorHandler::handle($e);

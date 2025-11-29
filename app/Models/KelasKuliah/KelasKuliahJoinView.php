@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 // ? Models
 use App\Models\KRS\KRSMatkul;
 use App\Models\KRS\MatKulView;
+use App\Models\TahunAjaran;
 use App\Models\Users\DosenView;
 
 class KelasKuliahJoinView extends Model
@@ -41,9 +42,12 @@ class KelasKuliahJoinView extends Model
                 'kelas_kuliah_id', 'tahun_id', 'jur_id', 'mk_id', 'join_kelas_kuliah_id', 'kjoin_kelas', 'kelas_kuliah', 'jns_mhs', 'sts_kelas', 'pengajar_id', 'join_jur'
             )->with(['dosen' => function ($query) {
                 $query->select('dosen_id', 'kd_dosen', 'nm_dosen', 'gelar');
-            }])->with(['matakuliah' => function ($query) {
+            }])
+            ->with('tahun_ajaran.minimal_presensi')
+            ->with(['matakuliah' => function ($query) {
                 $query->select('mk_id', 'kur_id', 'kd_mk', 'nm_mk', 'semester', 'sks', 'sts_mk', 'smt', 'kd_kur');
-            }])->orderBy('kelas_kuliah_id', 'DESC')
+            }])
+            ->orderBy('kelas_kuliah_id', 'DESC')
             ->get();
     }
 
@@ -76,5 +80,9 @@ class KelasKuliahJoinView extends Model
 
     public function kontrak_kelas_kuliah() {
         return $this->hasMany(KontrakKelasKuliah::class, 'fk_kelas_kuliah_id', 'kelas_kuliah_id');
+    }
+
+    public function tahun_ajaran() {
+        return $this->belongsTo(TahunAjaran::class, 'tahun_id', 'tahun_id');
     }
 }

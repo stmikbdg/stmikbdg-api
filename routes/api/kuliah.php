@@ -1,6 +1,6 @@
 <?php
 
-
+use App\Http\Controllers\Kuliah\MinimalPresensiController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Kuliah\KelasKuliahController;
 use App\Http\Controllers\Kuliah\KontrakKelasKuliahController;
@@ -19,12 +19,13 @@ use App\Http\Controllers\Kuliah\PresensiController;
  */
 
 // ? Kelas Kuliah Routes
-Route::controller(KelasKuliahController::class)
-    ->prefix('kelas-kuliah')
+Route::prefix('kelas-kuliah')
+    // ->prefix('kelas-kuliah')
     ->middleware('auth.jwt')
     ->group(function () {
         // * Routes untuk Dosen
         Route::prefix('/dosen')
+            ->controller(KelasKuliahController::class)
             ->middleware('auth.dosen')
             ->group(function () {
                 Route::get('/', 'getKelasKuliahByDosen');
@@ -33,14 +34,43 @@ Route::controller(KelasKuliahController::class)
                 Route::get('/open/{kelas_kuliah_id}/presensi', [PresensiController::class, 'getKehadiranMahasiswaByDosen']);
                 Route::delete('/presensi-mahasiswa', [PresensiController::class, 'deletePresensiMahasiswaByDosen']);
                 Route::post('/kontrak', [KontrakKelasKuliahController::class, 'upload']);
-            });
+                Route::get('/bap/kelas_kuliah_id/{kelas_kuliah_id}', 'getBAPbyKelasKuliahId');
+        });
 
         // * Routes untuk Mahasiswa
         Route::prefix('/mahasiswa')
             ->middleware('auth.mahasiswa')
+            ->controller(KelasKuliahController::class)
             ->group(function () {
                 Route::get('/', 'getKelasKuliahByMahasiswa')->middleware('auth.mahasiswa');
                 Route::post('/presensi', [PresensiController::class, 'kirimPinPresensi']);
                 Route::get('/presensi/qrcode', [PresensiController::class, 'kirimPinPresensiQrCode']);
-            });
-    });
+        });
+
+        Route::prefix('/minimal-presensi')
+            ->controller(MinimalPresensiController::class)
+            ->group(function () {
+                
+                Route::prefix('/admin')
+                    ->middleware('auth.admin')
+                    ->group(function () {
+
+                        Route::get('/', 'getAll_admin');
+                        Route::get('/mk_id/{mk_id}', 'getSingleByMkId_admin');
+                        Route::get('/tahun_id/{tahun_id}', 'getSingleByTahunId_admin');
+                        Route::post('/', 'create_admin');
+                        Route::put('/id/{id}', 'update_admin');
+                        Route::delete('/id/{id}', 'deleteSingleById_admin');
+
+                });
+
+                Route::prefix('/mahasiswa')
+                    ->middleware('auth.mahasiswa')
+                    ->group(function () {
+
+                        Route::get('/', 'get_mahasiswa');
+
+                });
+
+        });
+});

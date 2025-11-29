@@ -23,7 +23,14 @@ class TahunAkademik extends Model
         'genap_akhir',
         'antara_mulai',
         'antara_akhir',
-        'status'
+        'ganjil_pelaksanaan_mulai',
+        'ganjil_pelaksanaan_akhir',
+        'genap_pelaksanaan_mulai',
+        'genap_pelaksanaan_akhir',
+        'antara_pelaksanaan_mulai',
+        'antara_pelaksanaan_akhir',
+        'status',
+        'termin'
     ];
     public $increment = true;
     public $timestamps = true;

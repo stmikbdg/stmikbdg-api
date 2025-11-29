@@ -20,6 +20,7 @@ use App\Models\Keuangan\StatusKeuangan;
 // ? Models - view
 use App\Models\TahunAjaranView;
 use App\Models\KRS\MatkulDiselenggarakanView;
+use App\Models\Users\Dosen;
 
 class KRSController extends Controller
 {
@@ -30,9 +31,14 @@ class KRSController extends Controller
         if (auth()->user()) {
             if (!auth()->user()->is_dosen) {
                 $tahunAjaranController = new TahunAjaranController();
-                $this->currentSemester = $tahunAjaranController
+
+                $response = $tahunAjaranController
                     ->getSemesterMahasiswaSekarang()
-                    ->getData('data')['data']['semester'];
+                    ->getData('data');
+
+                // dd($response);
+
+                $this->currentSemester = $response['data']['semester'];
             }
             $this->user = $this->getUserAuth();
         }
@@ -40,7 +46,20 @@ class KRSController extends Controller
 
     public function checkKRS() {
         $tahunAjaran = TahunAjaranView::getTahunAjaran($this->user);
-        $krs = KRS::checkCurrentKRS($tahunAjaran['tahun_id'], $this->user);
+        if(!$tahunAjaran->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Saat ini belum ada tahun ajaran yang sedang aktif!'
+            ], 404);
+        }
+
+        $krs = KRS::checkCurrentKRS(
+            $tahunAjaran['tahun_id'], $this->user
+        );
+
+        // return response()->json([
+        //     'data' => $krs
+        // ]);
 
         if ($krs) {
             $dataKRS = self::getStatusKRS($krs, $tahunAjaran['du_open']);
@@ -456,5 +475,31 @@ class KRSController extends Controller
                     ]
                 ];
             }
+    }
+
+    public function getRiwayat(Request $request) {
+        try {
+
+            $krs_id = $request->query('krs_id');
+
+            $user = $this->getUserAuth();
+
+            if($krs_id) {
+                $krs = KRS::with('krsMatkul.mataKuliah', 'tahun_ajaran')
+                    ->where('mhs_id', $user['mhs_id'])
+                    ->where('krs_id', $krs_id)
+                    ->first();
+            }else{
+                $krs = KRS::with('krsMatkul.mataKuliah', 'tahun_ajaran')
+                    ->where('mhs_id', $user['mhs_id'])->get();
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $krs
+            ]);
+        } catch (\Exception $e) {
+            return ErrorHandler::handle($e);
+        }
     }
 }

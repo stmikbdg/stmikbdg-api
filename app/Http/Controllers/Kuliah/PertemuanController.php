@@ -210,6 +210,7 @@ class PertemuanController extends Controller {
                     'message' => 'Maaf, kelas kuliah hanya dapat ditutup oleh pengajarnya'
                 ], 403);
             }
+            
 
             $jadwal = JadwalView::getTanggalDanJenisPertemuan($kelasKuliahId);
             $kelasDibuka = Pertemuan::getLastKelasDibuka(

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Keuangan;
 
 use App\Http\Controllers\Controller;
+use App\Models\Keuangan\ManajemenBiaya;
 use App\Models\Keuangan\MasterKomponenBiaya;
 use Illuminate\Http\Request;
 
@@ -42,7 +43,7 @@ class MasterKomponenBiayaController extends Controller
             ManajemenBiaya::where('mhs_id', $mhs_id)->delete();
 
             foreach ($biaya_dipilih as $index) {
-                $komponen = KomponenBiaya::where('tahun_angkatan', $validated['tahun_angkatan'])
+                $komponen = MasterKomponenBiaya::where('tahun_angkatan', $validated['tahun_angkatan'])
                     ->where('nama_komponen', $nama_komponen[$index])
                     ->first();
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\KelasKuliah\MinimalPresensi;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
@@ -30,6 +31,7 @@ class TahunAjaranView extends Model
         return $query->where('jur_id', $filter['jur_id'])
             ->where('jns_mhs', $filter['jns_mhs'])
             ->where('kd_kampus', $filter['kd_kampus'])
+            ->with('minimal_presensi')
             ->orderBy('tahun_id', 'DESC')
             ->first();
     }
@@ -44,4 +46,9 @@ class TahunAjaranView extends Model
     public function krs() {
         return $this->hasMany(KRS::class, 'tahun_id', 'tahun_id');
     }
+
+    public function minimal_presensi() {
+        return $this->hasOne(MinimalPresensi::class, 'fk_tahun_ajaran', 'tahun_id');
+    }
+    
 }

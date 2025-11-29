@@ -15,7 +15,7 @@ class KomponenBiaya extends Model
     protected $primaryKey = 'id_komponen';
 
     protected $fillable = [
-        'tahun_angkatan', 'id_nama_komponen', 'nama_komponen', 'kewajiban', 'ket', 'status',
+        'tahun_angkatan', 'id_nama_komponen', 'nama_komponen', 'kewajiban', 'ket', 'status', 'tahun_id'
     ];
 
     public $timestamps = true;

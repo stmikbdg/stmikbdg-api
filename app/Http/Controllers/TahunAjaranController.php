@@ -6,10 +6,13 @@ use App\Exceptions\ErrorHandler;
 use App\Models\JurusanView;
 use App\Models\KampusView;
 use App\Models\Kuesioner\KuesionerPerkuliahan;
+use App\Models\TahunAjaran;
 use Illuminate\Http\Request;
 
 // ? Models - view
 use App\Models\TahunAjaranView;
+use App\Models\Users\Mahasiswa;
+use PhpParser\Node\Expr\FuncCall;
 
 class TahunAjaranController extends Controller
 {
@@ -38,6 +41,24 @@ class TahunAjaranController extends Controller
         }
     }
 
+    public function getTahunAjaranAktifByMhsId(Request $request, int $mhs_id) {
+        $mahasiswa = Mahasiswa::where('mhs_id', $mhs_id)->first();
+        if (!$mahasiswa) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Mahasiswa tidak ditemukan',
+                'data' => null
+            ], 404);
+        }
+
+        $tahunAjaran = TahunAjaranView::getTahunAjaran($mahasiswa);
+
+        return response()->json([
+            'success' => true,
+            'data' => $tahunAjaran
+        ]);
+    }
+
     /**
      * Get tahun ajaran aktif untuk si kuesioner
      * Tahun ajaran yang didapat haruslah yang memiliki daftar mata kuliah
@@ -47,9 +68,9 @@ class TahunAjaranController extends Controller
     public function getTahunAjaranAktifForKuesioner() {
         try {
             $tahunAjaranArr = TahunAjaranView::getTahunAjaranWithKRS()->filter(function ($item) {
-                if ($item['krs']->count() > 0) {
+                // if ($item['krs']->count() > 0) {
                     return $item;
-                }
+                // }
             })->flatten();
 
             $filteredTahunAjaran = [];
@@ -98,9 +119,9 @@ class TahunAjaranController extends Controller
     public function getTahunAjaranAktifForBerita() {
         try {
             $tahunAjaranArr = TahunAjaranView::getTahunAjaranWithKRS()->filter(function ($item) {
-                if ($item['krs']->count() > 0) {
+                // if ($item['krs']->count() > 0) {
                     return $item;
-                }
+                // }
             })->flatten();
 
             $filteredTahunAjaran = [];
@@ -149,7 +170,7 @@ class TahunAjaranController extends Controller
     public function getTahunAjaranAktifV2() {
         try {
             $tahunAjaranArr = TahunAjaranView::getTahunAjaranWithKRS()->filter(function ($item) {
-                return $item['krs']->count() > 0;
+                return $item['krs'];
             })->map(function ($item) {
                 return [
                     'tahun_id' => $item['tahun_id'],
@@ -171,6 +192,20 @@ class TahunAjaranController extends Controller
         try {
             $mahasiswa = $this->getUserAuth();
             $tahunAjaran = TahunAjaranView::getTahunAjaran($mahasiswa);
+
+            if(!$tahunAjaran->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Saat ini belum ada tahun ajaran yang sedang aktif!',
+                    'data' => [
+                        'tahun' => null,
+                        'smt' => 0,
+                        'keterangan_smt' => 'Belum ada, dikarenakan belum tahun ajaran aktif!',
+                        'semester' => 0
+                    ]
+                ], 404);
+            }
+
             $gap = $tahunAjaran['tahun'] - $mahasiswa['angkatan'];
             $semester = $tahunAjaran['smt'] === 1
                 ? $gap * 2 + 1
@@ -181,6 +216,18 @@ class TahunAjaranController extends Controller
                 'smt' => $tahunAjaran['smt'],
                 'keterangan_smt' => $tahunAjaran['smt'] === 1 ? 'Ganjil' : 'Genap',
                 'semester'=> $semester,
+            ]);
+        } catch (\Exception $e) {
+            return ErrorHandler::handle($e);
+        }
+    }
+    public function getTahunAjaranAktifNoFilter() {
+        try {
+           
+            $tahunAjaran = TahunAjaran::get(); // Or TahunAjaranView::all(); depending on your model
+            // dd($tahunAjaran);
+            return $this->successfulResponseJSON([
+                'tahun_ajaran' => $tahunAjaran,
             ]);
         } catch (\Exception $e) {
             return ErrorHandler::handle($e);

@@ -9,6 +9,7 @@ use App\Http\Controllers\TahunAjaranController;
  * jadi prefix atau awalan dari path dibuat bernama /kuesioner
  */
 
+
 // ? Kuesioner Routes
 Route::prefix('/berita')
     ->middleware('auth.jwt')

@@ -37,8 +37,8 @@ class Mahasiswa extends Model
     public function scopeGetAllMahasiswa(Builder $query, array $filter = []) {
 
         $query->where('sts_mhs', 'A')
-          ->where('kd_kampus', 'A')
-          ->whereNotNull('krs_id_last')
+        //   ->where('kd_kampus', 'A')
+          // ->whereNotNull('krs_id_last')
           ->with('jurusan');
 
         // Apply dynamic filters

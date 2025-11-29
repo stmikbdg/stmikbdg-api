@@ -9,15 +9,17 @@ use App\Http\Controllers\Keuangan\MasterBeasiswaController;
 
 use App\Http\Controllers\Keuangan\ListPotonganKaryawanController;
 use App\Http\Controllers\Keuangan\ListTunjanganKeluargaKaryawanController;
+use App\Http\Controllers\Keuangan\ManajemenBiayaController;
 use App\Http\Controllers\Keuangan\SkripsiKpKaryawanController;
 use App\Http\Controllers\Keuangan\StatusKaryawanController;
 use App\Http\Controllers\Keuangan\ProfileKaryawanController;
 use App\Http\Controllers\Keuangan\TunjanganKaryawanController;
-use App\Http\Controllers\Keuangan\MasterKomponenBiaya;
 use App\Http\Controllers\Keuangan\MasterKomponenBiayaController;
+use App\Http\Controllers\Keuangan\MhsController;
+use App\Http\Controllers\Keuangan\NotifikasiController;
+use App\Http\Controllers\Keuangan\VerifikasiPembayaranController;
 use App\Http\Controllers\TahunAjaranController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Users\UserController;
 
 
 Route::middleware('auth.jwt')
@@ -28,7 +30,27 @@ Route::middleware('auth.jwt')
             ->group( function () {
                 Route::get('/', [KeuanganController::class, 'getAllMahasiswaAktif'])->middleware('auth.admin');
                 Route::get('/tahun-angkatan', [KeuanganController::class, 'getAllTahunAngkatan'])->middleware('auth.admin');
-            });
+                Route::get('/total-sks/mhs_id/{mhs_id}', [KeuanganController::class, 'getTotalSksByMhsId'])->middleware('auth.admin');
+                Route::get('/mata-kuliah-aktif/mhs_id/{mhs_id}', [KeuanganController::class, 'getMataKuliahAktifByMhsId'])->middleware('auth.admin');
+
+                Route::controller(MhsController::class)
+                    ->middleware('auth.mahasiswa')
+                    ->group(function () {
+                        Route::get('/penerima-beasiswa', 'getPenerimaBeasiswa');
+                        Route::get('/biaya-per-semester', 'getBiayaPerSemester');
+                        Route::get('/pembayaran-list', 'getPembayaranList');
+                        Route::post('/pembayaran', 'pembayaran');
+                        Route::get('/cek-status', 'cek_pembayaran_mhs');
+                        Route::get('/total-sks', 'getTotalSKS');
+                });
+
+                Route::prefix('/tahun-ajaran')
+                    ->middleware('auth.admin')
+                    ->group(function () {
+                        Route::get('/mhs_id/{mhs_id}', [TahunAjaranController::class, 'getTahunAjaranAktifByMhsId']);
+                });
+
+        });        
 
         Route::prefix('/tahun-akademik')
             ->group(function () {
@@ -36,7 +58,24 @@ Route::middleware('auth.jwt')
                 Route::post('/', [KeuanganController::class, 'tahunAkademik_create'])->middleware('auth.admin');
                 Route::put('/{id}', [KeuanganController::class, 'tahunAkademik_update'])->middleware('auth.admin');
                 Route::delete('/{id}', [KeuanganController::class, 'tahunAkademik_delete'])->middleware('auth.admin');
-            });
+        });
+
+        Route::prefix('/notifikasi')
+            ->middleware('auth.admin')
+            ->controller(NotifikasiController::class)
+            ->group(function () {
+                Route::put('/id/{id}', 'update');
+                Route::get('/', 'get');
+        });
+
+        Route::prefix('/verifikasi-pembayaran')
+            ->middleware('auth.admin')
+            ->controller(VerifikasiPembayaranController::class)
+            ->group(function () {
+                
+                Route::get('/', 'getAll');
+                Route::put('/', 'verifikasi_pembayaran');
+        });
 
         
         // Route::prefix('/master-komponen-biaya')
@@ -44,15 +83,11 @@ Route::middleware('auth.jwt')
         //         // Route::get('/', [KeuanganController::class, 'getMasterKomponenBiaya'])->middleware('auth.admin') 
         //         Route::post('/', [MasterKomponenBiayaController::class, 'create'])->middleware('auth.admin');
         //     });
-            
-    });
 
         Route::prefix('/master-komponen-biaya')
             ->controller(KomponenBiayaController::class)
             ->group(function () {
                 // Route::get('/', [KeuanganController::class, 'getMasterKomponenBiaya'])->middleware('auth.admin') 
-
-
 
                 Route::get('/', 'getAll')->middleware('auth.admin');
                 // Route::post('/', 'create')->middleware('auth.admin');
@@ -71,7 +106,7 @@ Route::middleware('auth.jwt')
                         Route::put('/', 'update_by_tahun_angkatan');
                         // Route::delete('/{tahun_angkatan}', 'delete_by_tahun_angkatan');
                         
-                    });
+                });
         });
         
         Route::prefix('/master-beasiswa')
@@ -95,34 +130,47 @@ Route::middleware('auth.jwt')
             ->group(function () {
                 Route::get('/tahun-ajaran', [TahunAjaranController::class, 'getTahunAjaranAktifV2']);
                 Route::post('/', [MasterKomponenBiayaController::class, 'create'])->middleware('auth.admin');
-            });
+        });
 
-
+        Route::prefix('/manajemen-biaya')
+            ->middleware('auth.admin')
+            ->controller(ManajemenBiayaController::class)
+            ->group(function () {
+                Route::get('/', 'getAll');
+                Route::get('/id_manajemen_biaya/{id}', 'get_by_id_manajemen_biaya');
+                Route::get('/mhs_id/{mhs_id}', 'get_by_mhs_id');
+                Route::post('/', 'create');
+                Route::put('/id_manajemen_biaya/{id}', 'update');
+        });
+      
     Route::prefix('/karyawan')
-    ->group(function () {
-        // Route::get('/', [KeuanganController::class, 'getTahunAkademik'])->middleware('auth.admin');
-        Route::apiResource('/status', StatusKaryawanController::class);
-        Route::apiResource('/jabatan', JabatanKaryawanController::class);
+        ->group(function () {
+            // Route::get('/', [KeuanganController::class, 'getTahunAkademik'])->middleware('auth.admin');
+            Route::apiResource('/status', StatusKaryawanController::class);
+            Route::apiResource('/jabatan', JabatanKaryawanController::class);
 
-        Route::get('/pendidikan-terakhir', [GolonganKaryawanController::class, 'allDataPendidikanTerakhir']);
-        Route::apiResource('/golongan', GolonganKaryawanController::class);
+            Route::get('/pendidikan-terakhir', [GolonganKaryawanController::class, 'allDataPendidikanTerakhir']);
+            Route::apiResource('/golongan', GolonganKaryawanController::class);
 
 
-        Route::apiResource('/fungsional', FungsionalKaryawanController::class);
-        Route::apiResource('/list-potongan', ListPotonganKaryawanController::class);
-        Route::apiResource('/skripsi-kp', SkripsiKpKaryawanController::class);
-        Route::apiResource('/tunj-keluarga', ListTunjanganKeluargaKaryawanController::class);
-        Route::apiResource('/tunjangan', TunjanganKaryawanController::class);
+            Route::apiResource('/fungsional', FungsionalKaryawanController::class);
+            Route::apiResource('/list-potongan', ListPotonganKaryawanController::class);
+            Route::apiResource('/skripsi-kp', SkripsiKpKaryawanController::class);
+            Route::apiResource('/tunj-keluarga', ListTunjanganKeluargaKaryawanController::class);
+            Route::apiResource('/tunjangan', TunjanganKaryawanController::class);
 
-        // dataKaryawan
-        Route::get('/profile/detail', [ProfileKaryawanController::class, 'allDataKaryawan']);
-        Route::get('/profile/{id}', [ProfileKaryawanController::class, 'dataKaryawanBulanIniById']);
-        Route::get('/profile/month/current', [ProfileKaryawanController::class, 'dataKaryawanBulanIni']);
-        Route::apiResource('/profile', ProfileKaryawanController::class);
+            // dataKaryawan
+            Route::get('/profile/detail', [ProfileKaryawanController::class, 'allDataKaryawan']);
+            Route::get('/profile/{id}', [ProfileKaryawanController::class, 'dataKaryawanBulanIniById']);
+            Route::get('/profile/month/current', [ProfileKaryawanController::class, 'dataKaryawanBulanIni']);
+            Route::apiResource('/profile', ProfileKaryawanController::class);
     });
 
 
     Route::apiResource('/karyawan/fungsional', FungsionalKaryawanController::class);
+
+});
+
     
     
 

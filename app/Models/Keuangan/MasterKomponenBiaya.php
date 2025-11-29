@@ -20,7 +20,8 @@ class MasterKomponenBiaya extends Model
         'ket',
         'deleted_at',
         'deleted_from_user',
-        'status'
+        'status',
+        'jenis_kelas'
     ];
     public $increment = true;
     public $timestamps = true;

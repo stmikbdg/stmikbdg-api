@@ -39,6 +39,12 @@ class KRSDosenController extends Controller
             $jurusanMahasiswa = $mahasiswa->jurusan()->first();
             $krsMahasiswa = $mahasiswa->krs()->first();
             $krsMatkulDipilih = $krsMahasiswa->krsMatkul()->get();
+            // return $this->debug_log([
+            //     'mahasiswa' => $mahasiswa,
+            //     'jurusanMahasiswa' => $jurusanMahasiswa,
+            //     'krsMahasiswa' => $krsMahasiswa,
+            //     'krsMatkulDipilih' => $krsMatkulDipilih,
+            // ]);
             $setKRSData = self::setKRSData($jurusanMahasiswa, $krsMahasiswa, $krsMatkulDipilih, $mahasiswa['mhs_id']);
 
             return $this->successfulResponseJSON([
@@ -55,7 +61,10 @@ class KRSDosenController extends Controller
                 ],
             ]);
         } catch (\Exception $e) {
-            return ErrorHandler::handle($e);
+            return response()->json([
+                'status' => 'fail',
+                'message' => $e->getTrace(),
+            ], 500);
         }
     }
 
@@ -286,13 +295,21 @@ class KRSDosenController extends Controller
                 ->where('mk_id', $item['mk_id'])
                 ->first();
 
+            // return $this->debug_log([
+            //     'detailMatkul' => $detailMatkul,
+            //     'item' => $item,
+            // ]);
+            if(!$detailMatkul) {
+                continue;
+            }
+
             // get nilai akhir
             $nilaiAkhirMatkul = NilaiAkhirView::where('mhs_id', $mhsId)
                 ->where('mk_id', $item['mk_id'])
                 ->select('nilai', 'mutu')
                 ->first();
 
-            $tempMatkul[$index] = [
+            $tempMatkul[] = [
                 'krs_mk_id' => $item['krs_mk_id'],
                 'mk_id' => $item['mk_id'],
                 'sts_mk_krs' => $item['sts_mk_krs'],
@@ -318,7 +335,7 @@ class KRSDosenController extends Controller
             'ditolak_tanggal' => $krs['ditolak_tanggal'],
             'ditolak_alasan' => $krs['ditolak_alasan'],
             'ditolak_stlh_sah' => $krs['ditolak_stlh_sah'],
-            'krs_matkul' => $tempMatkul,
+            'krs_matkul' => collect($tempMatkul)->values(),
         ];
 
         return $krsData;

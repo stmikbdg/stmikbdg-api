@@ -28,22 +28,23 @@ Route::prefix('krs')
         Route::controller(TahunAjaranController::class)
             ->group(function() {
                 Route::get('/tahun-ajaran', 'getTahunAjaran');
-            });
+        });
 
         // * MatKul Controller
         Route::controller(MatKulController::class)
             ->group(function() {
                 Route::get('/mata-kuliah', 'getMataKuliah');
-            });
+        });
 
         // * KRS Controller
         Route::controller(KRSController::class)
             ->group(function() {
                 Route::get('/check', 'checkKRS');
+                Route::get('/riwayat', 'getRiwayat');
                 Route::post('/mata-kuliah/pengajuan', 'addKRSMahasiswa');
                 Route::post('/mata-kuliah/draft', 'addDraftKRSMahasiswa');
                 Route::get('/mata-kuliah/draft', 'getDraftKRSMatkul');
-            });
+        });
 
         // * IP Controller
         Route::controller(IPController::class)

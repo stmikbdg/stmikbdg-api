@@ -2,6 +2,10 @@
 
 namespace App\Models\KelasKuliah;
 
+use App\Models\KRS\KRSMatkul;
+use App\Models\KRS\MatKulView;
+use App\Models\TahunAjaran;
+use App\Models\Users\DosenView;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -31,5 +35,25 @@ class KelasKuliahView extends Model
             ->where('tahun_id', $filter['tahun_id'])
             ->pluck('mk_id')
             ->toArray();
+    }
+
+    public function krsMatkul() {
+        return $this->hasMany(KRSMatkul::class, 'kelas_kuliah_id', 'kelas_kuliah_id');
+    }
+
+    public function dosen() {
+        return $this->belongsTo(DosenView::class, 'pengajar_id', 'dosen_id');
+    }
+
+    public function matakuliah() {
+        return $this->belongsTo(MatKulView::class, 'mk_id', 'mk_id');
+    }
+
+    public function kontrak_kelas_kuliah() {
+        return $this->hasMany(KontrakKelasKuliah::class, 'fk_kelas_kuliah_id', 'kelas_kuliah_id');
+    }
+
+    public function tahun_ajaran() {
+        return $this->belongsTo(TahunAjaran::class, 'tahun_id', 'tahun_id');
     }
 }

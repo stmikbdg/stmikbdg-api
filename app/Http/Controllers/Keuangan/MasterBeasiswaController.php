@@ -11,6 +11,7 @@ use App\Models\TahunAjaranView;
 use App\Models\Users\Mahasiswa;
 use App\Models\Users\MahasiswaView;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Maatwebsite\Excel\Facades\Excel;
 
 class MasterBeasiswaController extends Controller
@@ -69,43 +70,75 @@ class MasterBeasiswaController extends Controller
         if($filters['by'] == 'mahasiswa') {
             $beasiswa = $this->penerima_beasiswa_model
                 ->with('master_beasiswa')
+                ->whereHas('master_beasiswa', function ($query) use ($filters) {
+                    $query->where('id_thn_akademik', $filters['tahun_id'])->where('status', 1);
+                })
+                ->where('status', 1)
                 ->get();
 
             $mahasiswa = $this->mahasiswa_model
                 ->where('sts_mhs', 'A')
-                ->where('kd_kampus', 'A')
+                
+                // ->where('kd_kampus', 'A')
                 ->whereNotNull('krs_id_last')
-                ->whereIn('mhs_id', $beasiswa->pluck('mhs_id')->toArray())
-                ->whereHas('krs.krsMatkul.kelasKuliahJoin', function ($query) use ($filters) {
-                    $query->where('tahun_id', $filters['tahun_id']);
-                })
-                ->with('jurusan')
-                // ->pluck(['mhs_id', 'nm_mhs', 'nim', 'jurusan'])
+                // ->whereIn('mhs_id', $beasiswa->pluck('mhs_id')->toArray())
+                // ->whereHas('krs.krsMatkul.kelasKuliahJoin', function ($query) use ($filters) {
+                //     $query->where('tahun_id', $filters['tahun_id']);
+                // })
+
+                ->with('jurusan', 'krs.krsMatkul.kelasKuliahJoin')
+                // ->pluck(['mhs_id', 'nm_mhs', 'nim', 'jurusan']);
                 ->get();
+
+            // dd($mahasiswa);
+            // dd($mahasiswa->toArray());
+
+            // return response()->json([
+            //     'data' => $mahasiswa
+            // ]);
 
             $data = $beasiswa->map(function ($item) use ($mahasiswa) {
                 $item['mahasiswa'] = $mahasiswa->where('mhs_id', $item['mhs_id'])->select(['nm_mhs', 'nim', 'jurusan'])->first();
                 return $item;
-            })->filter(function ($item) {
+            })
+            ->filter(function ($item) {
                 return $item['mahasiswa'] != null;
-            })->values();
+            })
+            ->values();
+            // ->filter(function ($item) {
+            //     return $item['mahasiswa'] != null;
+            // })->values(); jangan dulu di pake karena eror
         }else if($filters['by'] == 'beasiswa') {
 
             $mahasiswa = $this->mahasiswa_model
                 ->where('sts_mhs', 'A')
-                ->where('kd_kampus', 'A')
                 ->whereNotNull('krs_id_last')
                 ->with('jurusan', 'krs')
                 ->get();
+            
              
             $beasiswa = $this->master_beasiswa_model
-                ->with('penerima_beasiswa', function ($query) use ($mahasiswa) {
-                    $query->map(function($item) use ($mahasiswa) {
-                        $item['mahasiswa'] = $mahasiswa->where('mhs_id', $item['mhs_id'])->select(['nm_mhs', 'nim', 'jurusan'])->first();
-                        return $item;
-                    });
+                ->whereHas('penerima_beasiswa', function ($query) use ($mahasiswa) {
+                    $query
+                        ->where('status', 1)
+                        ->whereIn('mhs_id', $mahasiswa->pluck('mhs_id')->toArray());
                 })
+                ->with([
+                    'penerima_beasiswa' => function ($query) use ($mahasiswa) {
+                        $query
+                            ->where('status', 1)
+                            ->whereIn('mhs_id', $mahasiswa->pluck('mhs_id')->toArray());
+                    }
+                ])
+                ->where('id_thn_akademik', $filters['tahun_id'])
+                ->where('status', 1)
                 ->get();
+
+            foreach ($beasiswa as $bws) {
+                foreach ($bws->penerima_beasiswa as $penerima) {
+                    $penerima->mahasiswa = $mahasiswa->where('mhs_id', $penerima['mhs_id'])->select(['nm_mhs', 'nim', 'jurusan'])->first();
+                }
+            }
 
             $data = $beasiswa;
         }
@@ -125,36 +158,19 @@ class MasterBeasiswaController extends Controller
                 'nama_beasiswa' => 'required|string|max:255',
                 'id_thn_akademik' => 'required|integer',
                 'file_sk' => 'required|file|mimes:pdf,doc,docx|max:2048',
-                // 'semester' => 'required',
-                // 'berlaku_mulai' => 'required|date',
-                // 'berlaku_sampai' => 'required|date',
                 'file_excel' => 'nullable|file|mimes:xlsx,xls',
                 'mhs_id' => 'nullable',
             ]);
 
-            // $tahun_akademik = $this->tahun_akademik_model
-            //     ->where('status', 1)
-            //     ->where('id_thn_akademik', $request->id_thn_akademik)
-            //     ->select(['thn_akademik', 'id_thn_akademik'])
-            //     ->first();
 
-            $tahun_akademik = TahunAjaranView::getTahunAjaranWithKRS()->filter(function ($item) {
+            $tahun_akademik = TahunAjaranView::getTahunAjaranWithKRS()
+                ->filter(function ($item) {
                     return $item['krs']->count() > 0;
-                })->map(function ($item) {
-                    return [
-                        'tahun_id' => $item['tahun_id'],
-                        'uraian' => $item['uraian']
-                    ];
                 })
                 ->sortByDesc('tahun_id')
                 ->values()
                 ->where('tahun_id', $request->id_thn_akademik)
                 ->first();
-
-            // return response()->json([
-            //     'success' => false,
-            //     'data' => $tahun_akademik['uraian']
-            // ]);
 
             if(!$tahun_akademik) {
                 return response()->json([
@@ -163,8 +179,10 @@ class MasterBeasiswaController extends Controller
                 ], 404);
             }
 
+            
             if($request->hasFile('file_sk')) {
-                $fileName = 'SK_BEASISWA_'.str_replace(' / ', '_', $tahun_akademik['uraian']).'.pdf';
+                $now = Carbon::now();
+                $fileName = 'SK_BEASISWA_'.str_replace(' / ', '_', $tahun_akademik['uraian']).'_'.str_replace(' ', '_', $request->nama_beasiswa).'_'.$now->format('Ymd_His').'.pdf';
 
                 $response_file = $this->uploadFile('keuangan/beasiswa/sk', $fileName, $request->file('file_sk'));
 
@@ -191,7 +209,6 @@ class MasterBeasiswaController extends Controller
                     ->where('mhs_id', $request->mhs_id)
                     ->whereHas('master_beasiswa', function ($query) use ($request, $tahun_akademik) {
                         $query->where('id_thn_akademik', $tahun_akademik['tahun_id'])
-                            // ->where('semester', $request->semester)
                             ->where('status', 1);
                     })
                     ->where('status', 1)
@@ -207,7 +224,7 @@ class MasterBeasiswaController extends Controller
 
                 $mahasiswa = $this->mahasiswa_model
                     ->where('sts_mhs', 'A')
-                    ->where('kd_kampus', 'A')
+                    // ->where('kd_kampus', 'A')
                     ->whereNotNull('krs_id_last')
                     ->with('jurusan')
                     ->get();
@@ -220,44 +237,60 @@ class MasterBeasiswaController extends Controller
                     return (string) $row['nim'];
                 });
 
-                if(empty($data_excel_nims)) {
+                if ($data_excel_nims->isEmpty()) {
                     return response()->json([
                         'success' => false,
                         'message' => 'Anda belum memilih mahasiswa ke dalam file excel tersebut.'
                     ], 400);
                 }
 
-                $mhs_exists = $mahasiswa->whereIn('nim', $data_excel_nims->toArray())->values()->pluck('mhs_id');
+                // NIM yang ada di tabel mahasiswa
+                $nim_mahasiswa = $mahasiswa->pluck('nim');
 
-                if(empty($mhs_exists)) {
+                // NIM valid (yang ada di mahasiswa)
+                $nim_valid = $data_excel_nims->intersect($nim_mahasiswa)->values();
+
+                // NIM tidak valid (tidak ada di mahasiswa)
+                $nim_tidak_ada = $data_excel_nims->diff($nim_mahasiswa)->values();
+
+                // Ambil data mahasiswa valid
+                $mhs_exists = $mahasiswa
+                    ->whereIn('nim', $nim_valid->toArray())
+                    ->values();
+                
+                if ($mhs_exists->isEmpty()) {
                     return response()->json([
                         'success' => false,
                         'message' => 'Mahasiswa tersebut tidak ditemukan.'
                     ], 400);
                 }
 
-                $valid = 0;
+                $success = [];
+                $failed = [];
 
-                foreach ($mhs_exists as $mhs_id) {
+                foreach ($mhs_exists as $mhs) {
                     $hasActive = $this->penerima_beasiswa_model
-                        ->where('mhs_id', $mhs_id)
+                        ->where('mhs_id', $mhs->mhs_id)
                         ->whereHas('master_beasiswa', function ($query) use ($request, $tahun_akademik) {
-                            $query
-                                ->where('id_thn_akademik', $tahun_akademik['tahun_id'])
-                                // ->where('semester', $request->semester)
+                            $query->where('id_thn_akademik', $tahun_akademik['tahun_id'])
                                 ->where('status', 1);
                         })
                         ->where('status', 1)
                         ->exists();
-                    
-                    if(!$hasActive) $valid++;
+
+                    if (!$hasActive) {
+                        $success[] = $mhs->mhs_id;
+                    } else {
+                        $failed[] = $mhs->nim;
+                    }
                 }
 
-                if($valid == 0) {
+                if (count($success) == 0) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Semua mahasiswa di file sudah memiliki beasiswa aktif di tahun akademik dan semester ini.'
-                    ]);
+                        'message' => 'Semua mahasiswa di file sudah memiliki beasiswa aktif di tahun akademik dan semester ini.',
+                        'failed_nim' => $failed
+                    ], 400);
                 }
             }
 
@@ -265,9 +298,6 @@ class MasterBeasiswaController extends Controller
                 'nama_beasiswa' => $request->nama_beasiswa,
                 'id_thn_akademik' => $tahun_akademik['tahun_id'],
                 'file_sk' => $url ?? null,
-                // 'semester' => $request->semester,
-                // 'berlaku_mulai' => $request->berlaku_mulai,
-                // 'berlaku_sampai' => $request->berlaku_sampai,
                 'status' => 1,
             ]);
 
@@ -285,23 +315,28 @@ class MasterBeasiswaController extends Controller
                 ]);
             } else { // Input Excel
 
-                $payload = $mhs_exists->map(function ($mhs_id) use ($beasiswa) {
-                        return [
-                            'mhs_id' => $mhs_id,
-                            'status' => 1,
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                            'id_beasiswa' => $beasiswa->id_beasiswa
-                        ];
-                    });
-                
+                $payload = collect($success)->map(function ($mhs_id) use ($beasiswa) {
+                    return [
+                        'mhs_id' => $mhs_id,
+                        'status' => 1,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                        'id_beasiswa' => $beasiswa->id_beasiswa
+                    ];
+                });
 
                 $beasiswa->penerima_beasiswa()->insert($payload->toArray());
             }
 
             return response()->json([
                 'success' => true,
-                'data' => $beasiswa
+                'message' => 'Beasiswa berhasil ditambahkan.',
+                'data' => [
+                    'beasiswa' => $beasiswa,
+                    'jumlah_berhasil' => count($success ?? []),
+                    'jumlah_gagal' => count($nim_tidak_ada ?? []),
+                    'nim_gagal' => $nim_tidak_ada ?? []
+                ]
             ]);
         } catch (\Exception $error) {
             return response()->json([
@@ -326,32 +361,17 @@ class MasterBeasiswaController extends Controller
                 ], 404);
             }
 
-            // dd($request->all());
-            
             $request->validate([
                 'nama_beasiswa' => 'required|string',
                 'id_thn_akademik' => 'required|integer',
-                'semester' => 'required|integer',
                 'file_sk' => 'nullable|file|mimes:pdf|max:2048',
                 'file_excel' => 'nullable|file|mimes:xlsx,xls',
             ]);
 
-
-            // $tahun_akademik = $this->tahun_akademik_model
-            //     ->where('status', 1)
-            //     ->where('id_thn_akademik', $request->id_thn_akademik)
-            //     ->select(['thn_akademik', 'id_thn_akademik'])
-            //     ->first();
-
-            $tahun_akademik = TahunAjaranView::getTahunAjaranWithKRS()->filter(function ($item) {
+            $tahun_akademik = TahunAjaranView::getTahunAjaranWithKRS()
+                ->filter(function ($item) {
                     return $item['krs']->count() > 0;
-                })->map(function ($item) {
-                    return [
-                        'tahun_id' => $item['tahun_id'],
-                        'uraian' => $item['uraian']
-                    ];
                 })
-                ->sortByDesc('tahun_id')
                 ->values()
                 ->where('tahun_id', $request->id_thn_akademik)
                 ->first();
@@ -366,13 +386,12 @@ class MasterBeasiswaController extends Controller
             $beasiswa_payload = [
                 'nama_beasiswa' => $request->nama_beasiswa,
                 'id_thn_akademik' => $tahun_akademik->tahun_id,
-                'semester' => $request->semester,
             ];
 
             if($request->hasFile('file_sk')) {
                 $file = $request->file('file_sk');
-
-                $fileName = 'SK_BEASISWA_'.str_replace(' ', '_', $tahun_akademik->uraian).'_'.$request->semester.'.pdf';
+                $now = Carbon::now();
+                $fileName = 'SK_BEASISWA_'.str_replace(' / ', '_', $tahun_akademik['uraian']).'_'.str_replace(' ', '_', $request->nama_beasiswa).'_'.$now->format('Ymd_His').'.pdf';
 
                 $response_file = $this->uploadFile($this->storage_path, $fileName, $file);
 
@@ -389,16 +408,18 @@ class MasterBeasiswaController extends Controller
 
             $beasiswa->update($beasiswa_payload);
 
-            $status = 1;
+            $success = [];
+            $failed = [];
+            $nim_tidak_ada = collect();
 
             if($request->hasFile('file_excel')) {
+                // Semua penerima lama jadi nonaktif dulu
                 $this->penerima_beasiswa_model->where('id_beasiswa', $id_beasiswa)->update([
                     'status' => 0
                 ]);
 
                 $mahasiswa = $this->mahasiswa_model
                     ->where('sts_mhs', 'A')
-                    ->where('kd_kampus', 'A')
                     ->whereNotNull('krs_id_last')
                     ->with('jurusan')
                     ->get();
@@ -409,59 +430,62 @@ class MasterBeasiswaController extends Controller
                     return (string) $row['nim'];
                 });
 
-                if(empty($data_excel_nims)) {
+                if($data_excel_nims->isEmpty()) {
                     return response()->json([
                         'success' => false,
                         'message' => 'Anda belum memilih mahasiswa ke dalam file excel tersebut.'
                     ], 400);
                 }
 
-                $mhs_exists = $mahasiswa->whereIn('nim', $data_excel_nims->toArray())->values()->pluck('mhs_id');
+                // Cek nim valid dan nim tidak ada
+                $nim_mahasiswa = $mahasiswa->pluck('nim');
+                $nim_valid = $data_excel_nims->intersect($nim_mahasiswa)->values();
+                $nim_tidak_ada = $data_excel_nims->diff($nim_mahasiswa)->values();
 
-                if(empty($mhs_exists)) {
+                // Ambil data mahasiswa valid
+                $mhs_exists = $mahasiswa->whereIn('nim', $nim_valid->toArray())->values();
+
+                if ($mhs_exists->isEmpty()) {
                     return response()->json([
                         'success' => false,
                         'message' => 'Mahasiswa tersebut tidak ditemukan.'
                     ], 400);
                 }
 
-
-                foreach ($mhs_exists as $mhs_id) {
+                foreach ($mhs_exists as $mhs) {
                     $hasActiveInSamePeriod = $this->penerima_beasiswa_model
-                        ->where('mhs_id', $mhs_id)
+                        ->where('mhs_id', $mhs->mhs_id)
                         ->where('status', 1)
                         ->where('id_beasiswa', '!=', $id_beasiswa)
                         ->whereHas('master_beasiswa', function ($query) use ($request) {
                             $query->where('id_thn_akademik', $request->id_thn_akademik);
-                                // ->where('semester', $request->semester);
                         })
                         ->exists();
                     
                     if ($hasActiveInSamePeriod) {
-                        $skipped[] = $mhs_id;
+                        $skipped[] = $mhs->nim;
                         continue;
                     }
 
                     $wasInactiveInSamePeriod = $this->penerima_beasiswa_model
-                        ->where('mhs_id', $mhs_id)
+                        ->where('mhs_id', $mhs->mhs_id)
                         ->where('status', 0)
                         ->whereHas('master_beasiswa', function ($query) use ($request) {
                             $query->where('id_thn_akademik', $request->id_thn_akademik);
-                                // ->where('semester', $request->semester);
                         })
                         ->exists();
 
-                    // Jika tidak pernah aktif maupun nonaktif di periode yang sama, atau dulunya nonaktif dan sekarang aktif, lanjutkan
                     if (!$hasActiveInSamePeriod || $wasInactiveInSamePeriod) {
                         $this->penerima_beasiswa_model->updateOrCreate(
                             [
                                 'id_beasiswa' => $id_beasiswa,
-                                'mhs_id' => $mhs_id,
+                                'mhs_id' => $mhs->mhs_id,
                             ],
                             [
-                                'status' => $status,
+                                'status' => 1,
                             ]
                         );
+                        $success[] = $mhs->mhs_id;
                     }
                 }
             }
@@ -469,22 +493,28 @@ class MasterBeasiswaController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Beasiswa berhasil diperbarui.',
-                'data' => $beasiswa,
-                'skipped' => isset($mahasiswa) ? $mahasiswa->whereIn('mhs_id', $skipped)->values()->pluck('nim') : []
+                'data' => [
+                    'beasiswa' => $beasiswa,
+                    'jumlah_berhasil' => count($success),
+                    'jumlah_gagal' => count($nim_tidak_ada),
+                    'nim_gagal' => $nim_tidak_ada,
+                    'skipped' => $skipped
+                ]
             ]);
+
 
         } catch (\Exception $error) {
             return response()->json([
                 'success' => false,
                 'message' => $error->getMessage(),
-                'error' => $error
+                'error' => $error->getTraceAsString()
             ]);
         }
     }
 
     public function delete_by_id(Request $request, int $id_beasiswa) {
         try {
-            $data = $this->master_beasiswa_model->find($id_beasiswa);
+            $data = $this->master_beasiswa_model->with('penerima_beasiswa')->find($id_beasiswa);
 
             if (!$data) {
                 return response()->json([
@@ -492,6 +522,8 @@ class MasterBeasiswaController extends Controller
                     'message' => 'Data tidak ditemukan'
                 ], 404);
             }
+            
+            $mahasiswa = $data['penerima_beasiswa'];
 
             $data->update([
                 'status' => 0
@@ -504,7 +536,10 @@ class MasterBeasiswaController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Beasiswa dan data penerima berhasil dihapus!',
-                'data' => $data
+                'data' => [
+                    'master_beasiswa' => $data,
+                    'jumlah_mhs' => $mahasiswa->count()
+                ]
             ], 200);
         } catch (\Exception $error) {
             return response()->json([

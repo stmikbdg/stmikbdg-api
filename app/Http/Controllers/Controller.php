@@ -101,6 +101,14 @@ class Controller extends BaseController
         }
     }
 
+    public function debug_log(array $data = []) {
+        return response()->json([
+            'success' => true,
+            'message' => 'This is debugging data',
+            'data' => $data
+        ]);
+    }
+
     public function isDosenWali($dosen, $mhsId) {
         try {
             $mahasiswa = MahasiswaView::where('mhs_id', $mhsId)->first();

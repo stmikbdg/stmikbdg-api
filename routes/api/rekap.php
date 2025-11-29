@@ -35,11 +35,33 @@ Route::prefix('rekap')
             ->middleware('auth.admin')
             ->group(function () {
                 Route::get('', [RekapPresensiController::class, 'getRekapPertemuan']);
+                Route::prefix('/v2')
+                    ->group(function () {
+                        Route::get('/', [RekapPresensiController::class, 'getRekapPertemuanV2']);
+                    });
             });
 
         Route::prefix('berita-acara')
-            ->middleware('auth.admin')
+            ->controller(RekapPresensiController::class)
             ->group(function () {
-                Route::get('', [RekapPresensiController::class, 'getRekapBeritaAcara']);
+
+                // Admin
+                Route::middleware('auth.admin')
+                    ->group(function () {
+                        Route::get('', 'getRekapBeritaAcara');
+                });
+
+                Route::middleware('auth.dosen')
+                    ->prefix('dosen')
+                    ->group(function () {
+                        
+                        Route::prefix('filter')
+                            ->group(function () {
+                                Route::get('/matkul/{tahunId}', 'getFilterBAPDosenByMatkul');
+                        });
+
+                        Route::get('/kelas-kuliah/{kelas_kuliah_id}', 'getBAPDosenByKelasKuliahId');
+                });
+
             });
     });

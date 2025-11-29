@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Kuliah;
 
 use App\Exceptions\ErrorHandler;
 use App\Http\Controllers\Controller;
+use App\Models\KelasKuliah\BeritaAcara;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 
@@ -17,6 +18,7 @@ use App\Models\KelasKuliah\Pertemuan;
 use App\Models\KelasKuliah\Presensi;
 use App\Models\KRS\KRS;
 use App\Models\KRS\KRSMatkul;
+use App\Models\KRS\MatKulView;
 
 class KelasKuliahController extends Controller {
     public function getKelasKuliahByDosen(Request $request) {
@@ -55,12 +57,19 @@ class KelasKuliahController extends Controller {
                         'sts_kelas' => $item['sts_kelas'],
                         'pengajar_id' => $item['pengajar_id'],
                         'join_jur' => $item['join_jur'],
+                        // 'kelas_kuliah' => $item
                     ],
                     'dosen' => $item['dosen'],
                     'matakuliah' => $item['matakuliah'],
                     'riwayat_pertemuan' => $riwayatPertemuan,
                     'riwayat_pertemuan_maks' => 20, // sementara, untuk menentukan maksimal pertemuan,
-                    'kontrak_kuliah' => $kontrakKelasKuliah->last()
+                    'kontrak_kuliah' => $kontrakKelasKuliah->last(),
+                    'minimal_presensi' => [
+                        'persentase' => $item['tahun_ajaran']['minimal_presensi']
+                            ? $item['tahun_ajaran']['minimal_presensi']['persentase']
+                            : 0,
+                        'is_exist' => $item['tahun_ajaran']['minimal_presensi'] ? true : false 
+                    ]
                 ];
 
                 // atur response properti kelas dan jadwal
@@ -97,63 +106,132 @@ class KelasKuliahController extends Controller {
          * - Jika kelas_dibuka true, maka mahasiswa dapat mengirim pin presensi
          */
         try {
+
+            $isDebug = $request->query('debug');
+            $debugSection = $request->query('debug_section');
+
             $filterHari = $request->query('hari');
             $mahasiswa = $this->getUserAuth();
             $tahunAjaranAktif = TahunAjaranView::getTahunAjaran($mahasiswa);
+
+            if(!$tahunAjaranAktif->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Saat ini belum ada tahun ajaran yang sedang aktif!'
+                ], 404);
+            }
+
             $lastKRS = KRS::where('tahun_id', $tahunAjaranAktif['tahun_id'])
                 ->where('mhs_id', $mahasiswa['mhs_id'])
                 ->first();
 
+            if($isDebug && $debugSection === '1') {
+                return $this->debug_log([
+                    'lastKRS' => $lastKRS
+                ]);
+            }
+            
+
             if ($lastKRS) {
-                if ($lastKRS['sts_krs'] === 'S') {
+                if ($lastKRS['sts_krs'] == 'S') {
                     $krsMatkul = KRSMatkul::getKRSMatkulWithKelasKuliah($lastKRS['krs_id'])->toArray();
                     $kelasKuliah = array_map(function ($item) {
                         return $item['kelas_kuliah_join'];
                     }, $krsMatkul);
 
-                    if (isset($kelasKuliah[0]['kelas_kuliah_id'])) {
+                    if($isDebug && $debugSection === '2') {
+                        return $this->debug_log([
+                            'lastKRS' => $lastKRS,
+                            'krsMatkul' => $krsMatkul,
+                            'kelasKuliah' => $kelasKuliah
+                        ]);
+                    }
+
+                    if (count($kelasKuliah) > 0) {
                         foreach ($kelasKuliah as $index => $item) {
-                            $jadwal = JadwalView::getJadwalKelasKuliah($item['kelas_kuliah_id'], $mahasiswa['mhs_id'], false);
 
-                            $kontrakKuliah = KontrakKelasKuliah::getKontrakKelasKuliah($item);
+                            if(isset($item['kelas_kuliah_id'])) {
 
-                            // get riwayat presensi mahasiswa
-                            $arrPertemuan = Pertemuan::where('kelas_kuliah_id', $item['kelas_kuliah_id'])
-                                ->select('pertemuan_id')
-                                ->get()
-                                ->pluck('pertemuan_id')
-                                ->toArray();
-                            $riwayatPresensi = [];
+                                $jadwal = JadwalView::getJadwalKelasKuliah($item['kelas_kuliah_id'], $mahasiswa['mhs_id'], false);
+    
+                                $kontrakKuliah = KontrakKelasKuliah::getKontrakKelasKuliah($item);
+    
+                                // get riwayat presensi mahasiswa
+                                $arrPertemuan = Pertemuan::where('kelas_kuliah_id', $item['kelas_kuliah_id'])
+                                    ->select('pertemuan_id')
+                                    ->get()
+                                    ->pluck('pertemuan_id')
+                                    ->toArray();
+    
+                                $riwayatPresensi = [];
+    
+                                if ($arrPertemuan) {
+                                    $riwayatPresensi = Presensi::whereIn('pertemuan_id', $arrPertemuan)
+                                        ->where('mhs_id', $mahasiswa['mhs_id'])
+                                        ->select('masuk')
+                                        ->get();
+                                }
+    
+                                $formattedItem = [
+                                    'data_kelas' => [
+                                        'kelas_kuliah_id' => $item['kelas_kuliah_id'],
+                                        'tahun_id' => $item['tahun_id'],
+                                        'jur_id' => $item['jur_id'],
+                                        'mk_id' => $item['mk_id'],
+                                        'join_kelas_kuliah_id' => $item['join_kelas_kuliah_id'],
+                                        'kjoin_kelas' => $item['kjoin_kelas'],
+                                        'kelas_kuliah' => $item['kelas_kuliah'],
+                                        'jns_mhs' => $item['jns_mhs'],
+                                        'sts_kelas' => $item['sts_kelas'],
+                                        'pengajar_id' => $item['pengajar_id'],
+                                        'join_jur' => $item['join_jur'],
+                                    ],
+                                    'dosen' => $item['dosen'],
+                                    'matakuliah' => $item['matakuliah'],
+                                    'riwayat_presensi' => $riwayatPresensi,
+                                    'riwayat_presensi_maks' => 20, // sementara, untuk menentukan maksimal presensi atau pertemuan kelas,
+                                    'kontrak_kuliah' => $kontrakKuliah->last(),
+                                    'minimal_presensi' => [
+                                        'persentase' => $item['tahun_ajaran']['minimal_presensi']
+                                            ? $item['tahun_ajaran']['minimal_presensi']['persentase']
+                                            : 0,
+                                        'is_exist' => $item['tahun_ajaran']['minimal_presensi'] ? true : false
+                                    ],
+                                    'kelas_kuliah_id_exist' => true
+                                ];
+    
+                                $kelasKuliah[$index] = self::setKelasKuliahAndJadwalProperties($formattedItem, $jadwal);
+                            }else{
 
-                            if ($arrPertemuan) {
-                                $riwayatPresensi = Presensi::whereIn('pertemuan_id', $arrPertemuan)
-                                    ->where('mhs_id', $mahasiswa['mhs_id'])
-                                    ->select('masuk')
-                                    ->get();
+                                $matakuliah = MatKulView::where('mk_id', $krsMatkul[$index]['mk_id'])
+                                    ->select('mk_id', 'kd_mk', 'nm_mk', 'semester', 'sks', 'sts_mk', 'smt')
+                                    ->first();
+
+                                $formattedItem = [
+                                    'data_kelas' => [
+                                        'kelas_kuliah_id' => null,
+                                        'tahun_id' => $lastKRS['tahun_id'],
+                                        'jur_id' => $matakuliah ? $matakuliah['jur_id'] : null,
+                                        'mk_id' => $krsMatkul[$index]['mk_id'],
+                                        'join_kelas_kuliah_id' => null,
+                                        'kjoin_kelas' => null,
+                                        'kelas_kuliah' => null,
+                                        'jns_mhs' => $lastKRS['jns_mhs'],
+                                        'sts_kelas' => null,
+                                        'pengajar_id' => null,
+                                        'join_jur' => null,
+                                    ],
+                                    'dosen' => null,
+                                    'matakuliah' => $matakuliah,
+                                    'riwayat_presensi' => [],
+                                    'riwayat_presensi_maks' => 20, // sementara, untuk menentukan maksimal presensi atau pertemuan kelas,
+                                    'kontrak_kuliah' => null,
+                                    'minimal_presensi' => null,
+                                    'kelas_kuliah_id_exist' => false
+                                ];
+
+                                $kelasKuliah[$index] = self::setKelasKuliahAndJadwalProperties($formattedItem, null);
                             }
-
-                            $formattedItem = [
-                                'data_kelas' => [
-                                    'kelas_kuliah_id' => $item['kelas_kuliah_id'],
-                                    'tahun_id' => $item['tahun_id'],
-                                    'jur_id' => $item['jur_id'],
-                                    'mk_id' => $item['mk_id'],
-                                    'join_kelas_kuliah_id' => $item['join_kelas_kuliah_id'],
-                                    'kjoin_kelas' => $item['kjoin_kelas'],
-                                    'kelas_kuliah' => $item['kelas_kuliah'],
-                                    'jns_mhs' => $item['jns_mhs'],
-                                    'sts_kelas' => $item['sts_kelas'],
-                                    'pengajar_id' => $item['pengajar_id'],
-                                    'join_jur' => $item['join_jur'],
-                                ],
-                                'dosen' => $item['dosen'],
-                                'matakuliah' => $item['matakuliah'],
-                                'riwayat_presensi' => $riwayatPresensi,
-                                'riwayat_presensi_maks' => 20, // sementara, untuk menentukan maksimal presensi atau pertemuan kelas,
-                                'kontrak_kuliah' => $kontrakKuliah->last()
-                            ];
-
-                            $kelasKuliah[$index] = self::setKelasKuliahAndJadwalProperties($formattedItem, $jadwal);
                         }
 
                         // urutkan berdasarkan nama hari, Senin, Selasa, ... Minggu, Unknown
@@ -176,6 +254,11 @@ class KelasKuliahController extends Controller {
                             'kelas_kuliah' => $transformedResponse
                         ]);
                     }
+
+                    return response()->json([
+                        'status' => 'fail',
+                        'message' => 'Kelas kuliah tidak ditemukan pada pengajuan KRS terakhir'
+                    ], 404);
                 }
 
                 return response()->json([
@@ -186,7 +269,10 @@ class KelasKuliahController extends Controller {
 
             return $this->failedResponseJSON('Kelas kuliah tidak ditemukan', 404);
         } catch (\Exception $e) {
-            return ErrorHandler::handle($e);
+            return response()->json([
+                'success' => false,
+                'message' => $e->getTrace()
+            ], 500);
         }
     }
 
@@ -205,16 +291,18 @@ class KelasKuliahController extends Controller {
             $objKelasKuliah['data_kelas']['join_jur'] = trim($objKelasKuliah['data_kelas']['join_jur']);
         }
 
-        $objKelasKuliah['jadwal'] = $objJadwal->exists() ? $objJadwal : null;
-
-        if ($objJadwal->exists()) {
-            // format ke waktu lokal
-            $carbonDate = Carbon::parse($objJadwal['tanggal']);
-            $carbonDate->setLocale('id');
-
-            $objKelasKuliah['jadwal']['kd_ruang'] = trim($objJadwal['kd_ruang']);
-            $objKelasKuliah['jadwal']['nm_hari'] = $carbonDate->dayName;
-            $objKelasKuliah['jadwal']['tanggal_lokal'] = $carbonDate->isoFormat('D MMMM Y');
+        $objKelasKuliah['jadwal'] = $objJadwal !== null ? $objJadwal->exists() ? $objJadwal : null : null;
+        
+        if($objJadwal !== null) {
+            if ($objJadwal->exists()) {
+                // format ke waktu lokal
+                $carbonDate = Carbon::parse($objJadwal['tanggal']);
+                $carbonDate->setLocale('id');
+    
+                $objKelasKuliah['jadwal']['kd_ruang'] = trim($objJadwal['kd_ruang']);
+                $objKelasKuliah['jadwal']['nm_hari'] = $carbonDate->dayName;
+                $objKelasKuliah['jadwal']['tanggal_lokal'] = $carbonDate->isoFormat('D MMMM Y');
+            }
         }
 
         $objKelasKuliah['dosen'] = self::trimNamaDanGelarDosen($objKelasKuliah['dosen']);
@@ -273,5 +361,40 @@ class KelasKuliahController extends Controller {
         }
 
         return false;
+    }
+
+    public function getBAPbyKelasKuliahId(Request $request, int $kelas_kuliah_id) {
+        try {
+            $kelasKuliahId = $kelas_kuliah_id;
+
+            if(!$kelasKuliahId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Harap masukkan kelas kuliah id'
+                ], 403);
+            }
+
+            $kelasKuliah = KelasKuliahJoinView::where('kelas_kuliah_id', $kelasKuliahId)
+                ->with('dosen:dosen_id,nm_dosen,kd_dosen,gelar')
+                ->with('matakuliah:mk_id,nm_mk,kd_mk,sks')
+                ->first(['kelas_kuliah_id', 'tahun_id', 'mk_id', 'kjoin_kelas', 'join_kelas_kuliah_id', 'pengajar_id']);
+
+            if(!$kelasKuliah) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Kelas Kuliah tidak ditemukan'
+                ], 404);
+            }
+
+            $berita_acara = BeritaAcara::where('kelas_kuliah_id', $kelasKuliahId)
+                ->get(['berita_acara', 'jml_mhs', 'mhs_hdr', 'mhs_tdk_hdr', 'created_at', 'berita_acara_id']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $berita_acara
+            ]);
+        } catch (\Exception $e) {
+            return ErrorHandler::handle($e);
+        }
     }
 }

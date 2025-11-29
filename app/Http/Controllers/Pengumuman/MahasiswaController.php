@@ -139,6 +139,14 @@ class MahasiswaController extends Controller
             // cek krs di tahun ajaran aktif
             $mahasiswa = $this->getUserAuth();
             $tahunAjaran = TahunAjaranView::getTahunAjaran($mahasiswa);
+
+            if(!$tahunAjaran->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Saat ini belum ada tahun ajaran yang sedang aktif!'
+                ], 404);
+            }
+            
             $lastKRS = KRS::where('tahun_id', $tahunAjaran['tahun_id'])
                 ->where('mhs_id', $mahasiswa['mhs_id'])
                 ->first();
@@ -156,25 +164,26 @@ class MahasiswaController extends Controller
 
                 foreach ($tempKelasKuliahArr as $item) {
                     if (!is_null($item['matakuliah'])) {
-                        if ($item['kelasKuliahJoin']['kjoin_kelas'] and is_null($item['kelasKuliahJoin']['pengajar_id'])) {
-                            $kelasKuliah = KelasKuliahJoinView::where(
-                                'kelas_kuliah_id', $item['kelasKuliahJoin']['join_kelas_kuliah_id']
-                                )->select('kelas_kuliah_id', 'join_kelas_kuliah_id', 'pengajar_id', 'mk_id', 'kd_mk')
-                                ->with('dosen')
-                                ->first();
-                            $pengajar = [
-                                'nm_dosen' => trim($kelasKuliah['dosen']['nm_dosen']),
-                                'gelar' => trim($kelasKuliah['dosen']['gelar'])
-                            ];
-                        } else {
-                            $dosen = DosenView::where('dosen_id', $item['kelasKuliahJoin']['pengajar_id'])
-                                ->select('dosen_id', 'nm_dosen', 'gelar')
-                                ->first();
-                            $pengajar = [
-                                'nm_dosen' => trim($dosen['nm_dosen']),
-                                'gelar' => trim($dosen['gelar'])
-                            ];
-                        }
+                        // if ($item['kelasKuliahJoin']['kjoin_kelas'] and is_null($item['kelasKuliahJoin']['pengajar_id'])) {
+                        //     $kelasKuliah = KelasKuliahJoinView::where(
+                        //         'kelas_kuliah_id', $item['kelasKuliahJoin']['join_kelas_kuliah_id']
+                        //         )->select('kelas_kuliah_id', 'join_kelas_kuliah_id', 'pengajar_id', 'mk_id', 'kd_mk')
+                        //         ->with('dosen')
+                        //         ->first();
+                        //     // $pengajar = [
+                        //     //     'nm_dosen' => trim($kelasKuliah['dosen']['nm_dosen']),
+                        //     //     'gelar' => trim($kelasKuliah['dosen']['gelar'])
+                        //     // ];
+                        // } else {
+                        //     $dosen = DosenView::where('dosen_id', $item['kelasKuliahJoin']['pengajar_id'])
+                        //         ->select('dosen_id', 'nm_dosen', 'gelar')
+                        //         ->first();
+                            
+                        //     // $pengajar = [
+                        //     //     'nm_dosen' => trim($dosen['nm_dosen']),
+                        //     //     'gelar' => trim($dosen['gelar'])
+                        //     // ];
+                        // }
 
                         $kelas = [
                             'kelas_kuliah_id' => $item['kelasKuliahJoin']['kelas_kuliah_id'],
@@ -188,7 +197,7 @@ class MahasiswaController extends Controller
                                 'semester' => $item['matakuliah']['semester'],
                                 'sks' => $item['matakuliah']['sks'],
                             ],
-                            'dosen' => $pengajar
+                            // 'dosen' => $pengajar
                         ];
 
                         array_push($kelasKuliahArr, $kelas);
@@ -202,7 +211,17 @@ class MahasiswaController extends Controller
 
             return $this->failedResponseJSON('Pastikan KRS di tahun ajaran saat ini telah disetujui', 400);
         } catch (\Exception $e) {
-            return ErrorHandler::handle($e);
+            return response()->json([
+                'status' => 'failed',
+                'message' => $e->getMessage(),
+                'debug' => [
+                    'exception' => get_class($e),
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'trace' => $e->getTrace()
+                ]
+            ], 500);
         }
     }
 

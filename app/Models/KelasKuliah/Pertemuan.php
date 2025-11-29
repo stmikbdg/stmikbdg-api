@@ -55,7 +55,7 @@ class Pertemuan extends Model
     public function scopeGetLastKelasDibuka(Builder $query, $kelasKuliahId, $dosenId, $tanggalJadwal) {
         return $query->where('kelas_kuliah_id', $kelasKuliahId)
             ->where('dosen_id', $dosenId)
-            ->where('tanggal', $tanggalJadwal)
+            // ->where('tanggal', $tanggalJadwal)
             ->where('kelas_dibuka', true)
             ->orderBy('pertemuan_id', 'DESC')
             ->first();
