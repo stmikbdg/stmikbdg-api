@@ -3,22 +3,24 @@
 namespace App\Http\Controllers\Kuliah;
 
 use App\Exceptions\ErrorHandler;
+use App\Exports\RekapExport;
 use App\Http\Controllers\Controller;
 use App\Models\KelasKuliah\BeritaAcara;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-
-// ? Models - tabels
-use App\Models\TahunAjaranView;
 use App\Models\KelasKuliah\KelasKuliahJoinView;
 use App\Models\KelasKuliah\Pertemuan;
 use App\Models\KelasKuliah\Presensi;
+// ? Models - tabels
 use App\Models\KRS\KRSMatkul;
+use App\Models\TahunAjaranView;
 use App\Models\Users\Mahasiswa;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
 
 class RekapPresensiController extends Controller
 {
-    public function getListDosen(Request $request) {
+    public function getListDosen(Request $request)
+    {
         try {
             $tahunId = $request->query('tahun_id');
 
@@ -36,12 +38,12 @@ class RekapPresensiController extends Controller
                         return [
                             'tahun_id' => (int) $tahunId,
                             'dosen_id' => $item['pengajar_id'],
-                            'nm_dosen' => trim($item->dosen->nm_dosen)
+                            'nm_dosen' => trim($item->dosen->nm_dosen),
                         ];
                     })->values();
 
                     return $this->successfulResponseJSON([
-                        'dosen_mengajar' => $dosenMengajar
+                        'dosen_mengajar' => $dosenMengajar,
                     ]);
                 }
             }
@@ -52,7 +54,8 @@ class RekapPresensiController extends Controller
         }
     }
 
-    public function getListMatkul(Request $request) {
+    public function getListMatkul(Request $request)
+    {
         try {
             $dosenId = $request->query('dosen_id');
             $tahunId = $request->query('tahun_id');
@@ -70,7 +73,7 @@ class RekapPresensiController extends Controller
                         ->get();
 
                     return $this->successfulResponseJSON([
-                        'matakuliah_diselenggarakan' => $matkulList
+                        'matakuliah_diselenggarakan' => $matkulList,
                     ]);
                 }
             }
@@ -81,7 +84,8 @@ class RekapPresensiController extends Controller
         }
     }
 
-    public function getRekapPresensi(Request $request) {
+    public function getRekapPresensi(Request $request)
+    {
         try {
             $kelasKuliahId = $request->query('kelas_kuliah_id');
 
@@ -93,18 +97,8 @@ class RekapPresensiController extends Controller
 
                 if ($kelasKuliah) {
                     $allPertemuan = Pertemuan::where('kelas_kuliah_id', $kelasKuliahId)->get();
-                    $pertemuanIdArr = $allPertemuan->pluck('pertemuan_id')->flatten();
                     $totalPertemuan = $allPertemuan->count();
-                    $allPresensi = Presensi::whereIn('pertemuan_id', $pertemuanIdArr)
-                        ->groupBy('mhs_id', 'nim', 'nm_mhs')
-                        ->select(
-                            'mhs_id',
-                            'nim',
-                            'nm_mhs',
-                            DB::raw('COUNT(masuk) as total_kehadiran'),
-                            DB::raw("(COUNT(masuk) / $totalPertemuan) * 100 as persentase_kehadiran")
-                        )
-                        ->get();
+                    $allPresensi = $this->presensiRows($kelasKuliahId, $allPertemuan);
 
                     foreach ($allPresensi as $index => $item) {
                         $allPresensi[$index]['total_pertemuan'] = $totalPertemuan;
@@ -127,8 +121,8 @@ class RekapPresensiController extends Controller
                             'tahun_ajaran' => $tahunAjaran,
                             'dosen' => $dosen,
                             'matakuliah' => $matkul,
-                            'kehadiran_mahasiswa' => $allPresensi
-                        ]
+                            'kehadiran_mahasiswa' => $allPresensi,
+                        ],
                     ]);
                 }
             }
@@ -139,7 +133,8 @@ class RekapPresensiController extends Controller
         }
     }
 
-    public function getRekapPertemuan(Request $request) {
+    public function getRekapPertemuan(Request $request)
+    {
         try {
             $kelasKuliahId = $request->query('kelas_kuliah_id');
             $fromDate = $request->query('from');
@@ -191,7 +186,7 @@ class RekapPresensiController extends Controller
                         'tahun_ajaran' => $tahunAjaranArr,
                         'dosen' => $kelasKuliah->dosen,
                         'matakuliah' => $kelasKuliah->matakuliah,
-                        'rekap_pertemuan' => $pertemuan
+                        'rekap_pertemuan' => $pertemuan,
                     ]);
                 }
             }
@@ -202,7 +197,8 @@ class RekapPresensiController extends Controller
         }
     }
 
-    public function getRekapPertemuanV2(Request $request) {
+    public function getRekapPertemuanV2(Request $request)
+    {
         try {
             // $kelasKuliahId = $request->query('kelas_kuliah_id');
             $pengajarId = $request->query('pengajar_id');
@@ -210,19 +206,19 @@ class RekapPresensiController extends Controller
             $fromDate = $request->query('from');
             $toDate = $request->query('to');
 
-            if (!$pengajarId) {
+            if (! $pengajarId) {
                 return $this->failedResponseJSON('Nilai query pengajar_id tidak ditemukan', 404);
             }
 
-            if (!$tahunId) {
+            if (! $tahunId) {
                 return $this->failedResponseJSON('Nilai query tahun_id tidak ditemukan', 404);
             }
 
-            if (!$fromDate) {
+            if (! $fromDate) {
                 return $this->failedResponseJSON('Nilai query from tidak ditemukan', 404);
             }
 
-            if (!$toDate) {
+            if (! $toDate) {
                 return $this->failedResponseJSON('Nilai query to tidak ditemukan', 404);
             }
 
@@ -233,10 +229,10 @@ class RekapPresensiController extends Controller
                 ->select(['kelas_kuliah_id', 'tahun_id', 'mk_id', 'kjoin_kelas', 'join_kelas_kuliah_id', 'pengajar_id', 'jns_mhs', 'kelas_kuliah'])
                 ->get();
 
-            if($kelasKuliahArr->count() < 0) {
+            if ($kelasKuliahArr->count() < 0) {
                 return response()->json([
                     'success' => true,
-                    'data' => []
+                    'data' => [],
                 ]);
             }
 
@@ -254,9 +250,8 @@ class RekapPresensiController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $data
+                'data' => $data,
             ]);
-
 
             foreach ($kelasKuliahArr as $kelasKuliah) {
                 $tempKelasKuliahIdArr = [];
@@ -317,20 +312,21 @@ class RekapPresensiController extends Controller
                     // 'dosen' => $kelasKuliah->dosen,
                     // 'matakuliah' => $kelasKuliah->matakuliah,
                     'pertemuan' => $pertemuan,
-                    'kelas_kuliah' => $kelasKuliah
+                    'kelas_kuliah' => $kelasKuliah,
                 ];
             }
 
             return response()->json([
                 'sucess' => true,
-                'data' => $data
+                'data' => $data,
             ]);
         } catch (\Exception $e) {
             return ErrorHandler::handle($e);
         }
     }
 
-    public function getRekapBeritaAcara(Request $request) {
+    public function getRekapBeritaAcara(Request $request)
+    {
         try {
             $kelasKuliahId = $request->query('kelas_kuliah_id');
             $fromDate = $request->query('from');
@@ -349,7 +345,7 @@ class RekapPresensiController extends Controller
                         ->get(['berita_acara', 'jml_mhs', 'mhs_hdr', 'mhs_tdk_hdr', 'created_at', 'berita_acara_id']);
 
                     return $this->successfulResponseJSON([
-                        'berita_acara' => $berita_acara
+                        'berita_acara' => $berita_acara,
                     ]);
                 }
             }
@@ -360,7 +356,8 @@ class RekapPresensiController extends Controller
         }
     }
 
-    public function getFilterBAPDosenByMatkul(Request $request, int $tahunId) {
+    public function getFilterBAPDosenByMatkul(Request $request, int $tahunId)
+    {
         try {
             $dosen = $this->getUserAuth();
 
@@ -381,7 +378,7 @@ class RekapPresensiController extends Controller
                         ->get();
 
                     return $this->successfulResponseJSON([
-                        'matakuliah_diselenggarakan' => $matkulList
+                        'matakuliah_diselenggarakan' => $matkulList,
                     ]);
                 }
             }
@@ -390,7 +387,89 @@ class RekapPresensiController extends Controller
         }
     }
 
-    public function getBAPDosenByKelasKuliahId(Request $request, int $kelas_kuliah_id) {
+    private function presensiRows($kelasKuliahId, $pertemuan)
+    {
+        $totalPertemuan = $pertemuan->count();
+        $hadir = Presensi::whereIn('pertemuan_id', $pertemuan->pluck('pertemuan_id'))
+            ->whereNotNull('masuk')
+            ->select('mhs_id', DB::raw('COUNT(*) as total_kehadiran'))
+            ->groupBy('mhs_id')
+            ->pluck('total_kehadiran', 'mhs_id');
+        $mahasiswaIds = KRSMatkul::where('kelas_kuliah_id', $kelasKuliahId)
+            ->with('krs:krs_id,mhs_id')
+            ->get()
+            ->pluck('krs.mhs_id')
+            ->filter()
+            ->unique();
+
+        return Mahasiswa::whereIn('mhs_id', $mahasiswaIds)
+            ->get(['mhs_id', 'nim', 'nm_mhs'])
+            ->map(function ($mahasiswa) use ($hadir, $totalPertemuan) {
+                $mahasiswa['total_kehadiran'] = (int) ($hadir[$mahasiswa->mhs_id] ?? 0);
+                $mahasiswa['persentase_kehadiran'] = $totalPertemuan > 0
+                    ? $mahasiswa['total_kehadiran'] / $totalPertemuan * 100
+                    : 0;
+
+                return $mahasiswa;
+            });
+    }
+
+    public function exportPresensi(Request $request)
+    {
+        $request->validate(['kelas_kuliah_id' => 'required']);
+        $kelas = KelasKuliahJoinView::where('kelas_kuliah_id', $request->query('kelas_kuliah_id'))
+            ->with('dosen:dosen_id,nm_dosen,gelar,kd_dosen')
+            ->with('matakuliah:mk_id,nm_mk,kd_mk,sks')
+            ->firstOrFail();
+        $tahun = TahunAjaranView::where('tahun_id', $kelas->tahun_id)->first();
+        $pertemuan = Pertemuan::where('kelas_kuliah_id', $kelas->kelas_kuliah_id)->get();
+        $total = $pertemuan->count();
+        $presensi = $this->presensiRows($kelas->kelas_kuliah_id, $pertemuan);
+        $rows = [
+            ['REKAP PRESENSI'],
+            ['Tahun Ajaran', $tahun->uraian ?? '-'],
+            ['Dosen', trim($kelas->dosen->nm_dosen ?? '-')],
+            ['Mata Kuliah', $kelas->matakuliah->nm_mk ?? '-'],
+            [],
+            ['NIM', 'Nama Mahasiswa', 'Kehadiran', 'Pertemuan', 'Persentase Kehadiran'],
+        ];
+        foreach ($presensi as $item) {
+            $rows[] = [$item->nim, $item->nm_mhs, $item->total_kehadiran, $total, $total ? round($item->total_kehadiran / $total * 100, 2).'%' : '0%'];
+        }
+        $name = preg_replace('/[^A-Za-z0-9_-]+/', '-', 'rekap-presensi-'.($kelas->matakuliah->nm_mk ?? $kelas->kelas_kuliah_id));
+
+        return Excel::download(new RekapExport($rows), trim($name, '-').'.xlsx');
+    }
+
+    public function exportBeritaAcara(Request $request)
+    {
+        $request->validate(['kelas_kuliah_id' => 'required', 'from' => 'required|date', 'to' => 'required|date|after_or_equal:from']);
+        $kelas = KelasKuliahJoinView::where('kelas_kuliah_id', $request->query('kelas_kuliah_id'))
+            ->with('dosen:dosen_id,nm_dosen,gelar,kd_dosen')
+            ->with('matakuliah:mk_id,nm_mk,kd_mk,sks')
+            ->firstOrFail();
+        $tahun = TahunAjaranView::where('tahun_id', $kelas->tahun_id)->first();
+        $bap = BeritaAcara::whereBetween('created_at', [$request->query('from').' 00:00:00', $request->query('to').' 23:59:59'])
+            ->where('kelas_kuliah_id', $kelas->kelas_kuliah_id)->get();
+        $rows = [
+            ['REKAP BERITA ACARA'],
+            ['Tahun Ajaran', $tahun->uraian ?? '-'],
+            ['Dosen', trim($kelas->dosen->nm_dosen ?? '-')],
+            ['Mata Kuliah', $kelas->matakuliah->nm_mk ?? '-'],
+            ['Periode', $request->query('from').' s.d. '.$request->query('to')],
+            [],
+            ['Tanggal', 'Berita Acara', 'Mahasiswa Hadir', 'Mahasiswa Tidak Hadir', 'Jumlah Mahasiswa'],
+        ];
+        foreach ($bap as $item) {
+            $rows[] = [$item->created_at, $item->berita_acara, $item->mhs_hdr, $item->mhs_tdk_hdr, $item->jml_mhs];
+        }
+        $name = preg_replace('/[^A-Za-z0-9_-]+/', '-', 'rekap-berita-acara-'.($kelas->matakuliah->nm_mk ?? $kelas->kelas_kuliah_id).'-'.$request->query('from').'-'.$request->query('to'));
+
+        return Excel::download(new RekapExport($rows), trim($name, '-').'.xlsx');
+    }
+
+    public function getBAPDosenByKelasKuliahId(Request $request, int $kelas_kuliah_id)
+    {
         $kelasKuliahId = $kelas_kuliah_id;
         $fromDate = $request->query('from');
         $toDate = $request->query('to');
@@ -411,7 +490,7 @@ class RekapPresensiController extends Controller
 
                 $data = $berita_acara;
             }
-        }else{
+        } else {
             $kelasKuliah = KelasKuliahJoinView::where('kelas_kuliah_id', $kelasKuliahId)
                 ->with('dosen:dosen_id,nm_dosen,kd_dosen,gelar')
                 ->with('matakuliah:mk_id,nm_mk,kd_mk,sks')
@@ -428,7 +507,7 @@ class RekapPresensiController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $data
+            'data' => $data,
         ]);
     }
 }

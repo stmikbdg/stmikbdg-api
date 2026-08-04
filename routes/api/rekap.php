@@ -1,16 +1,15 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-
-use App\Http\Controllers\TahunAjaranController;
 use App\Http\Controllers\Kuliah\RekapPresensiController;
+use App\Http\Controllers\TahunAjaranController;
+use Illuminate\Support\Facades\Route;
 
 Route::prefix('rekap')
     ->middleware('auth.jwt')
     ->group(function () {
         // rekap presensi
         Route::prefix('presensi')
-            ->middleware('auth.admin')
+            ->middleware('auth.prodi')
             ->group(function () {
                 // filter
                 Route::prefix('filter')
@@ -27,6 +26,7 @@ Route::prefix('rekap')
                 Route::controller(RekapPresensiController::class)
                     ->group(function () {
                         Route::get('', 'getRekapPresensi');
+                        Route::get('/export', 'exportPresensi');
                     });
             });
 
@@ -46,22 +46,23 @@ Route::prefix('rekap')
             ->group(function () {
 
                 // Admin
-                Route::middleware('auth.admin')
+                Route::middleware('auth.prodi')
                     ->group(function () {
                         Route::get('', 'getRekapBeritaAcara');
-                });
+                        Route::get('/export', 'exportBeritaAcara');
+                    });
 
                 Route::middleware('auth.dosen')
                     ->prefix('dosen')
                     ->group(function () {
-                        
+
                         Route::prefix('filter')
                             ->group(function () {
                                 Route::get('/matkul/{tahunId}', 'getFilterBAPDosenByMatkul');
-                        });
+                            });
 
                         Route::get('/kelas-kuliah/{kelas_kuliah_id}', 'getBAPDosenByKelasKuliahId');
-                });
+                    });
 
             });
     });

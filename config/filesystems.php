@@ -53,31 +53,30 @@ return [
             'url' => env('AWS_URL'),
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
-            'throw' => false,
+            'throw' => true,
         ],
         'supabase' => [
             'driver' => 'supabase',
-            'key'    => env('SUPABASE_STORAGE_KEY'), // Use a privileged key; read-only does not work
+            'key' => env('SUPABASE_STORAGE_KEY'), // Use a privileged key; read-only does not work
             'bucket' => env('SUPABASE_STORAGE_BUCKET'),
             'endpoint' => env('SUPABASE_STORAGE_ENDPOINT'), // <- Automatically generated; change here if you are using a proxy
 
-            'public'                      => true,  // Default to true
-            'defaultUrlGeneration'        => 'public', // 'signed' | 'public' <- default depends on public
+            'public' => true,  // Default to true
+            'defaultUrlGeneration' => 'public', // 'signed' | 'public' <- default depends on public
 
-            'signedUrlExpires' => 60*60*24, // 1 day <- default to 1 hour (3600)
+            'signedUrlExpires' => 60 * 60 * 24, // 1 day <- default to 1 hour (3600)
         ],
         'r2' => [
             'driver' => 's3',
-            'key'    => env('R2_ACCESS_KEY_ID'),
+            'key' => env('R2_ACCESS_KEY_ID'),
             'secret' => env('R2_SECRET_ACCESS_KEY'),
             'region' => 'auto',
             'bucket' => env('R2_BUCKET'),
             'endpoint' => env('R2_ENDPOINT'),
             'visibility' => 'public',
             'use_path_style_endpoint' => true,
-            'url' => env('R2_CUSTOM_DOMAIN')
+            'url' => env('R2_CUSTOM_DOMAIN'),
         ],
-
 
     ],
 
@@ -94,6 +93,6 @@ return [
 
     'links' => [
         public_path('storage') => storage_path('app/public'),
-    ]
+    ],
 
 ];

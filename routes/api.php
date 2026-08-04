@@ -1,5 +1,10 @@
 <?php
 
+use App\Http\Controllers\HealthController;
+use Illuminate\Support\Facades\Route;
+
+Route::get('/health', HealthController::class);
+
 // ? Authentications Routes
 require __DIR__.'/api/authentications.php';
 
@@ -54,3 +59,6 @@ require __DIR__.'/api/ujian.php';
 // ? Additional Routes (Tambahan)
 require __DIR__.'/api/additional.php';
 require __DIR__.'/api/file.php';
+
+// ? Arsip Digital
+require __DIR__.'/api/arsip-digital.php';
