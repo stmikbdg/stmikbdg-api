@@ -4,25 +4,19 @@ namespace App\Http\Controllers\KRS;
 
 use App\Exceptions\ErrorHandler;
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-
+use App\Models\KRS\KRS;
 // ? Models
 use App\Models\KRS\NilaiAkhirView;
 // ? Models - table
-use App\Models\KRS\KRS;
-use App\Models\KRS\KRSMatkul;
-use App\Models\Users\Dosen;
-
-// ? Models - view
-use App\Models\KRS\MatkulDiselenggarakanView;
-use App\Models\TahunAjaranView;
 use App\Models\Users\Mahasiswa;
-use App\Models\Users\MahasiswaView;
-
+// ? Models - view
+use App\Services\KRS\AcademicRecordSummaryService;
+use Illuminate\Http\Request;
 
 class IPController extends Controller
 {
-    public function getIPSemester(Request $request) {
+    public function getIPSemester(Request $request, AcademicRecordSummaryService $summaryService)
+    {
         try {
             $user = $this->getUserAuth(); // get data mhs yg req
             $listNilai = NilaiAkhirView::getNilaiAkhirByMhsId($user['mhs_id']);
@@ -30,15 +24,8 @@ class IPController extends Controller
             $countTotal = count($listNilai);
 
             if ($countTotal > 0) {
-                $countTotalMutu = $collectionListNilai->sum('mutu');
-                $countNilai = $collectionListNilai->countBy('nilai');
-
-                $countTotalSks = $collectionListNilai->sum(function ($matkul) {
-                    return $matkul['matakuliah']['sks'];
-                });
-
                 $groupedBySemester = $collectionListNilai->groupBy(function ($matkul) {
-                    return  $matkul['matakuliah']['semester'];
+                    return $matkul['matakuliah']['semester'];
                 });
 
                 // ? jika terdapat query 's'
@@ -48,20 +35,12 @@ class IPController extends Controller
 
                     return response()->json([
                         'status' => 'success',
-                        'data' => $filteredBySemester
+                        'data' => $filteredBySemester,
                     ]);
                 }
 
                 // nilai keseluruhan
-                $data = [
-                    'total_sks' => $countTotalSks,
-                    'total_semua_ip' => ((float) $countTotalMutu / $countTotal),
-                    'total_nilai_a' => isset($countNilai['A']) ? $countNilai['A'] : 0,
-                    'total_nilai_b' => isset($countNilai['B']) ? $countNilai['B'] : 0,
-                    'total_nilai_c' => isset($countNilai['C']) ? $countNilai['C'] : 0,
-                    'total_nilai_d' => isset($countNilai['D']) ? $countNilai['D'] : 0,
-                    'total_nilai_e' => isset($countNilai['E']) ? $countNilai['E'] : 0,
-                ];
+                $data = $summaryService->summarize($collectionListNilai);
 
                 $tempIPSemester = [];
 
@@ -93,13 +72,13 @@ class IPController extends Controller
 
                 return response()->json([
                     'status' => 'success',
-                    'data' => $data
+                    'data' => $data,
                 ]);
             }
 
             return response()->json([
                 'status' => 'success',
-                'data' => null
+                'data' => null,
             ]);
         } catch (\Exception $e) {
             return ErrorHandler::handle($e);
@@ -133,7 +112,36 @@ class IPController extends Controller
     }
 }
 
-    private function getIPBySemester(string $semester, mixed $ipSemester) {
+    // Ini titipan
+    public function getListKRSMahasiswaAll(Request $request)
+    {
+        try {
+
+            $tahunId = $request->query('tahun_id');
+
+            $data = Mahasiswa::with('krs')
+                ->when($tahunId, function ($query) use ($tahunId) {
+                    $query->where('tahun_id', $tahunId);
+                })
+                ->get();
+
+            // hanya mahasiswa yang punya krs
+            $data = $data->filter(function ($item) {
+                return count($item->krs) > 0;
+            })->values();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $data,
+            ]);
+
+        } catch (\Exception $e) {
+            return ErrorHandler::handle($e);
+        }
+    }
+
+    private function getIPBySemester(string $semester, mixed $ipSemester)
+    {
         $ipSemesterArr = $ipSemester->toArray();
 
         if (array_key_exists($semester, $ipSemesterArr)) {
@@ -184,7 +192,7 @@ class IPController extends Controller
                 'total_nilai_b' => 0,
                 'total_nilai_c' => 0,
                 'total_nilai_d' => 0,
-                'total_nilai_e' => 0
+                'total_nilai_e' => 0,
             ];
         }
 

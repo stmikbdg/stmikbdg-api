@@ -1,11 +1,11 @@
 <?php
 
 use App\Http\Controllers\KRS\IPController;
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\KRS\KRSController;
 use App\Http\Controllers\KRS\KRSDosenController;
 use App\Http\Controllers\KRS\MatKulController;
 use App\Http\Controllers\TahunAjaranController;
+use Illuminate\Support\Facades\Route;
 
 /**
  * Routes yang ada di sini digunakan untuk mengelola KRS, meliputi:
@@ -26,25 +26,25 @@ Route::prefix('krs')
     ->group(function () {
         // * Tahun Ajaran
         Route::controller(TahunAjaranController::class)
-            ->group(function() {
+            ->group(function () {
                 Route::get('/tahun-ajaran', 'getTahunAjaran');
-        });
+            });
 
         // * MatKul Controller
         Route::controller(MatKulController::class)
-            ->group(function() {
+            ->group(function () {
                 Route::get('/mata-kuliah', 'getMataKuliah');
-        });
+            });
 
         // * KRS Controller
         Route::controller(KRSController::class)
-            ->group(function() {
+            ->group(function () {
                 Route::get('/check', 'checkKRS');
                 Route::get('/riwayat', 'getRiwayat');
                 Route::post('/mata-kuliah/pengajuan', 'addKRSMahasiswa');
                 Route::post('/mata-kuliah/draft', 'addDraftKRSMahasiswa');
                 Route::get('/mata-kuliah/draft', 'getDraftKRSMatkul');
-        });
+            });
 
         // * IP Controller
         Route::controller(IPController::class)
@@ -61,6 +61,13 @@ Route::controller(KRSDosenController::class)
         Route::get('/', 'getKRSMahasiswa');
         Route::put('/', 'updateStatusKRSMahasiswa');
         Route::get('/list', 'getListKRSMahasiswa');
+        Route::get('/export', 'exportKRSMahasiswa');
         Route::get('/filter/angkatan', 'getListFilterAngkatan');
         Route::get('/filter/semester', 'getListFilterSemester');
+
+        // ? KHS Mahasiswa - khusus dosen wali
+        // catatan: route static '/khs/list' wajib diletakkan sebelum '/{mhs_id}/khs'
+        // agar segmen 'khs' tidak ditangkap sebagai parameter route.
+        Route::get('/khs/list', 'getListMahasiswaKHS');
+        Route::get('/{mhs_id}/khs', 'getKHSMahasiswa');
     });

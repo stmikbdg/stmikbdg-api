@@ -4,24 +4,24 @@ namespace App\Http\Controllers\Authentications;
 
 use App\Exceptions\ErrorHandler;
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
-
+use App\Models\Authentications\LoginHistory;
+use App\Models\Users\Site;
+use App\Models\Users\UserSitesView;
 // ? JWT
+use App\Support\SiteUrl;
+use Carbon\Carbon;
+// ? Models - view
+use ErrorException;
+// ? Models - Tables
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Tymon\JWTAuth\Exceptions\JWTException;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
-// ? Models - view
-use App\Models\Users\UserSitesView;
-
-// ? Models - Tables
-use App\Models\Users\Site;
-use App\Models\Authentications\LoginHistory;
-use ErrorException;
-
-class AuthController extends Controller {
-    public function userLogin(Request $request) {
+class AuthController extends Controller
+{
+    public function userLogin(Request $request)
+    {
         try {
             $request->validate([
                 'email' => 'required|email',
@@ -31,7 +31,7 @@ class AuthController extends Controller {
             $credentials = $request->only('email', 'password');
             $platform = $request->query('platform');
 
-            if (!$platform) {
+            if (! $platform) {
                 return response()->json([
                     'success' => 'fail',
                     'message' => 'Nilai query platform pada url diperlukan',
@@ -43,7 +43,7 @@ class AuthController extends Controller {
 
             if ($token) {
                 $roles = collect(auth()->user())->filter(function ($item) {
-                    if (is_bool($item))  {
+                    if (is_bool($item)) {
                         return $item;
                     }
                 })->toArray();
@@ -73,7 +73,7 @@ class AuthController extends Controller {
                             //     'is_secretary' => $staffPositions['is_secretary']
                             // ]);
                             $roles = [
-                                'is_secretary' => $staffPositions['is_secretary']
+                                'is_secretary' => $staffPositions['is_secretary'],
                             ];
                         }
 
@@ -96,6 +96,7 @@ class AuthController extends Controller {
 
                     if ($loginHistory !== 'success') {
                         auth()->logout(true);
+
                         return $loginHistory;
                     }
                 }
@@ -120,7 +121,8 @@ class AuthController extends Controller {
         return $this->successfulResponseJSON($data, null, 201);
     }
 
-    public function userLogout() {
+    public function userLogout()
+    {
         $token = JWTAuth::getToken()->get();
 
         if ($token) {
@@ -135,7 +137,8 @@ class AuthController extends Controller {
         ], 200);
     }
 
-    public function validateToken() {
+    public function validateToken()
+    {
         try {
             return $this->successfulResponseJSON([
                 'token' => JWTAuth::getToken()->get(),
@@ -145,42 +148,42 @@ class AuthController extends Controller {
         }
     }
 
-    public function validateUserSiteAccess(Request $request) {
+    public function validateUserSiteAccess(Request $request)
+    {
         try {
             $userId = auth()->user()->id;
-            $site = filter_var($request->query('url'), FILTER_VALIDATE_URL);
-            $userSite = UserSitesView::where('user_id', $userId)
-                            ->where('url', 'like', '%' . $site .'%')
-                            ->get();
+            $site = SiteUrl::canonical($request->query('url'));
+            $userSite = SiteUrl::first(UserSitesView::where('user_id', $userId), $site);
 
-            if (count($userSite) > 0) {
+            if ($userSite) {
                 return $this->successfulResponseJSON([
                     'access' => true,
-                    'site' => $userSite,
+                    'site' => collect([$userSite]),
                 ]);
             }
 
             return response()->json([
                 'status' => 'fail',
                 'message' => 'Pengguna dengan email <b>'
-                    . auth()->user()->email
-                    .  " tidak memiliki akses</b> ke alamat <i>"
-                    . $site
-                    . "</i>.<br/>Please <a href='$site/logout' rel='noopener'><b>Logout</b></a>.",
+                    .auth()->user()->email
+                    .' tidak memiliki akses</b> ke alamat <i>'
+                    .$site
+                    ."</i>.<br/>Please <a href='$site/logout' rel='noopener'><b>Logout</b></a>.",
             ], 403);
         } catch (\Exception $e) {
             return ErrorHandler::handle($e);
         }
     }
 
-    public function getSite(Request $request) {
+    public function getSite(Request $request)
+    {
         try {
             if ($request->query('url')) {
-                $site = Site::where('url', 'like', '%' . $request->query('url') . '%')->first();
+                $site = SiteUrl::first(Site::query(), $request->query('url'));
 
                 if ($site) {
                     return $this->successfulResponseJSON([
-                        'site' => $site
+                        'site' => $site,
                     ]);
                 }
             }
@@ -191,21 +194,18 @@ class AuthController extends Controller {
         }
     }
 
-    public function checkUrl(Request $request) {
+    public function checkUrl(Request $request)
+    {
         try {
             $url = $request->query('link');
 
             if ($url) {
-                $validatedUrl = filter_var(strtolower($url), FILTER_VALIDATE_URL);
+                $site = SiteUrl::first(Site::query(), $url);
 
-                if ($validatedUrl) {
-                    $site = Site::where('url', strtolower($url))->first();
-
-                    if ($site) {
-                        return $this->successfulResponseJSON([
-                            'site' => $site
-                        ]);
-                    }
+                if ($site) {
+                    return $this->successfulResponseJSON([
+                        'site' => $site,
+                    ]);
                 }
             }
 
@@ -219,18 +219,23 @@ class AuthController extends Controller {
      * setExpirationToken
      * Fungsi untuk mengatur waktu kadaluarsa access token
      *
-     * @param string $platform berisi nilai 'android' atau 'web'
+     * @param  string  $platform  berisi nilai 'android' atau 'web'
      *
      * Jika 'android', maka tidak memiliki kadaluarsa.
      * Jika 'web', maka memiliki waktu kadaluarsa selama 6 jam
      */
     private function setExpirationToken(string $platform)
     {
-        if ($platform == 'android') return 60 * 24 * 30 * 12 * 1000; // kurang lebih 1000 tahun
-        else if ($platform == 'web') return 60 * 6; // 6 hours
+        if ($platform == 'android') {
+            return 60 * 24 * 30 * 12 * 1000;
+        } // kurang lebih 1000 tahun
+        elseif ($platform == 'web') {
+            return 60 * 6;
+        } // 6 hours
     }
 
-    private function getOrSetLoginHistory($token) {
+    private function getOrSetLoginHistory($token)
+    {
         /**
          * Periksa beberapa kondisi berikut:
          * - Jika belum ada pada tabel login_histories, maka bisa insert
@@ -247,13 +252,13 @@ class AuthController extends Controller {
          * akun baru pertama kali login di android
          * maka insert data autentikasi akun tersebut
          */
-        if  (!$tokenExists) {
+        if (! $tokenExists) {
             $data = [
                 'user_id' => auth()->user()->id,
                 'platform' => 'android',
                 'last_token' => $token,
                 'is_active' => true,
-                'login_at' => Carbon::now()
+                'login_at' => Carbon::now(),
             ];
 
             DB::beginTransaction();
@@ -261,10 +266,12 @@ class AuthController extends Controller {
 
             if ($create) {
                 DB::commit();
+
                 return 'success';
             }
 
             DB::rollBack();
+
             return $this->failedResponseJSON('Login gagal dilakukan');
         }
 
@@ -280,7 +287,7 @@ class AuthController extends Controller {
         /**
          * akun sudah tidak aktif
          */
-        if (!$tokenExists['is_active']) {
+        if (! $tokenExists['is_active']) {
             return $this->failedResponseJSON(
                 'Akses akun Anda ke aplikasi Android telah ditutup oleh Admin', 400
             );

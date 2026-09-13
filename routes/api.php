@@ -1,5 +1,16 @@
 <?php
 
+use App\Http\Controllers\ArsipDigital\InstitutionalArchiveVerificationController;
+use App\Http\Controllers\ArsipDigital\OfficialDocumentVerificationController;
+use App\Http\Controllers\HealthController;
+use Illuminate\Support\Facades\Route;
+
+Route::get('/health', HealthController::class);
+Route::get('/arsip-digital/verify/{token}', [OfficialDocumentVerificationController::class, 'show'])
+    ->where('token', '[A-Fa-f0-9]{64}');
+Route::get('/arsip-digital/institutional-verify/{token}', [InstitutionalArchiveVerificationController::class, 'show'])
+    ->where('token', '[A-Fa-f0-9]{64}');
+
 // ? Authentications Routes
 require __DIR__.'/api/authentications.php';
 
@@ -54,3 +65,6 @@ require __DIR__.'/api/ujian.php';
 // ? Additional Routes (Tambahan)
 require __DIR__.'/api/additional.php';
 require __DIR__.'/api/file.php';
+
+// ? Arsip Digital
+require __DIR__.'/api/arsip-digital.php';
