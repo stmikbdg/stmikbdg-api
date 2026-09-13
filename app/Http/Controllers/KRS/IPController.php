@@ -84,6 +84,33 @@ class IPController extends Controller
             return ErrorHandler::handle($e);
         }
     }
+    //Ini titipan 
+    public function getListKRSMahasiswaAll(Request $request)
+{
+    try {
+
+        $tahunId = $request->query('tahun_id');
+
+        $data = Mahasiswa::with('krs')
+            ->when($tahunId, function ($query) use ($tahunId) {
+                $query->where('tahun_id', $tahunId);
+            })
+            ->get();
+
+        // hanya mahasiswa yang punya krs
+        $data = $data->filter(function ($item) {
+            return count($item->krs) > 0;
+        })->values();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $data
+        ]);
+
+    } catch (\Exception $e) {
+        return ErrorHandler::handle($e);
+    }
+}
 
     // Ini titipan
     public function getListKRSMahasiswaAll(Request $request)
